@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/joho/godotenv"
+	//"github.com/joho/godotenv"
 )
 
 type Env struct{
@@ -54,13 +54,13 @@ func(e *Env) createTables(){
 
 func main() {
 	
-	if os.Getenv("ENVIRONNEMENT") == "" {
+	/*if os.Getenv("ENVIRONNEMENT") == "" {
 		err := godotenv.Load()
 		if err != nil {
 			fmt.Println("Erreur lors de l'accés au variable d'evironnement")
 			return
 		}	
-	}
+	}*/
 	r := chi.NewRouter()
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&tls=skip-verify",os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_DATABASE"))
