@@ -19,8 +19,10 @@ type UserInfos struct {
 
 
 func(e *Env) dataOnly(w http.ResponseWriter, r *http.Request) {
-	user := r.Context().Value(userInfosKey)
-
+	user := cookieRecuperation(w, r, "user_id")
+	if user == "nil" {
+		return
+	}
 	data, err := e.db.Query(`SELECT url,slug,urlGenerate,click_total,click_mobile,click_pc FROM link_Tracker_Link WHERE user_id=? ORDER BY click_total DESC`, user)
 	if err != nil {
 		fmt.Println("Erreur récupération utilisateur :", err)
@@ -43,6 +45,17 @@ func(e *Env) dataOnly(w http.ResponseWriter, r *http.Request) {
 		utilisateurs = append(utilisateurs, value)
 	}
 
+	date := time.Now().Add(24*7*time.Hour)
+	cookie := &http.Cookie{
+		Name:     "user_id",
+		Path:     "/",
+		Value:    user,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
+		Expires:   date,
+	}
+	http.SetCookie(w,cookie)
 	json.NewEncoder(w).Encode(utilisateurs)
 }
 

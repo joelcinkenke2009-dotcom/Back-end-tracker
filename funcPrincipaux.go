@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -185,18 +184,19 @@ func resetFailedLogin(email string) {
 	failedLogin[email] = MAX_TRIES
 }
 
-type Request struct {
-	Url string `json:"urlCreate"`
-}
+// type Request struct {
+// 	Url string `json:"urlCreate"`
+// }
 
 func (e *Env) createLink(w http.ResponseWriter, r *http.Request) {
 	user := r.Context().Value(userInfosKey)
+	// var val Request
 
-	var val Request
+	// json.NewDecoder(r.Body).Decode(&val)
 
-	json.NewDecoder(r.Body).Decode(&val)
+	url := r.FormValue("url")
 
-	val.Url = formateUrl(strings.ToLower(val.Url))
+	url = formateUrl(strings.ToLower(url))
 
 	idByte := make([]byte, 3)
 	_, err := rand.Read(idByte)
@@ -208,12 +208,14 @@ func (e *Env) createLink(w http.ResponseWriter, r *http.Request) {
 
 	urlGenerate := fmt.Sprintf("%s/link/%s", os.Getenv("MY_URL"), slug)
 
-	_, err = e.db.Exec("INSERT INTO link_Tracker_Link (user_id,url,slug,urlGenerate) VALUES (?,?,?,?)", user, val.Url, slug, urlGenerate)
+	_, err = e.db.Exec("INSERT INTO link_Tracker_Link (user_id,url,slug,urlGenerate) VALUES (?,?,?,?)", user, url, slug, urlGenerate)
 	if err != nil {
 		log.Printf("erreur lors de l'insertion %s de l'id=%s", err, user)
-		http.Error(w, "Ce lien a été déjà enregistré", 409)
+		http.Redirect(w,r,os.Getenv("FRONT")+"/dashboard?status=500",http.StatusFound)
 		return
 	}
+	
+	http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard", http.StatusFound)
 }
 
 func (e *Env) redirectLink(w http.ResponseWriter, r *http.Request) {
@@ -255,18 +257,20 @@ func (e *Env) redirectLink(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
-type SlugDelete struct {
-	Slug     string `json:"slugDelete"`
-}
+// type SlugDelete struct {
+// 	Slug     string `json:"slugDelete"`
+// }
 
 func (e *Env) deleteLink(w http.ResponseWriter, r *http.Request) {
 	user := r.Context().Value(userInfosKey)
 
-	var slugDelete SlugDelete
+	// var slugDelete SlugDelete
 
-	json.NewDecoder(r.Body).Decode(&slugDelete)
+	// json.NewDecoder(r.Body).Decode(&slugDelete)
 
-	_, err := e.db.Exec("DELETE FROM link_Tracker_Link WHERE slug=? AND user_id=?", slugDelete.Slug, user)
+	slug := r.FormValue("slug")
+
+	_, err := e.db.Exec("DELETE FROM link_Tracker_Link WHERE slug=? AND user_id=?", slug, user)
 	if err != nil {
 		fmt.Println("Erreur lors de la suppression: ", err)
 		return
@@ -286,21 +290,24 @@ func (e *Env) modifyLink(w http.ResponseWriter, r *http.Request) {
 	_, err := e.db.Exec("UPDATE link_Tracker_Link SET url=? WHERE url=? AND user_id=?", newUrl, url, user)
 	if err != nil {
 		log.Println("Erreur lors de la modification: ", err)
+		http.Redirect(w, r,os.Getenv("FRONT") + "/dashboard?status=500", http.StatusFound)
 		return
 	}
 	http.Redirect(w, r,os.Getenv("FRONT") + "/dashboard", http.StatusFound)
 }
 
-type Url struct {
-	Url string `json:"link"`
-}
+// type Url struct {
+// 	Url string `json:"link"`
+// }
 
 func verifyLink(w http.ResponseWriter, r *http.Request) {
-	var req Url
+	// var req Url
 
-	json.NewDecoder(r.Body).Decode(&req)
+	// json.NewDecoder(r.Body).Decode(&req)
 
-	url,err := url.Parse(req.Url)
+	req := r.FormValue("link")
+
+	url,err := url.Parse(req)
 	if err != nil {
 		return
 	}
@@ -315,26 +322,23 @@ func verifyLink(w http.ResponseWriter, r *http.Request) {
 		Timeout: 10 * time.Second,
 	}
 
-	resp, err := client.Head(req.Url)
+	resp, err := client.Head(req)
 	if err != nil ||  resp.StatusCode >= 404 {
-		if os.IsTimeout(err) {
-			http.Error(w,`{"error":"Timaout"}`,http.StatusGatewayTimeout)
+		if os.IsTimeout(err) {			
+			http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?status=409", http.StatusFound)
+			return
 		}else{
-			http.Error(w, `{"error":"Ce lien est invalide"}`, http.StatusBadRequest)
+			http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?status=404", http.StatusFound)
+			return
 		}
-		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 403 {
-		json.NewEncoder(w).Encode(map[string]any{
-			"valid": true,
-			"code":resp.StatusCode,
-		})
+		http.Redirect(w, r, os.Getenv("FRONT")+ "/dashboard?status=200", http.StatusFound)
+		return
 	}else{
-		json.NewEncoder(w).Encode(map[string]any{
-			"valid": false,
-			"code":resp.StatusCode,
-		})
+		http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?status=404", http.StatusFound)
+		return
 	}
 }
