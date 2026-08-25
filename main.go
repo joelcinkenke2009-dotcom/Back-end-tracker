@@ -50,6 +50,18 @@ func(e *Env) createTables(){
 	if err != nil {
 		panic(err)
 	}
+
+	createTableMeta := `CREATE TABLE IF NOT EXISTS user_meta_ad (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		user_id VARCHAR(255),
+		access_token VARCHAR(255),
+		expires_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`;
+	_, err =  e.db.Exec(createTableMeta)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func main() {
@@ -85,10 +97,15 @@ func main() {
 
 	r.Post("/users/inscription", app.inscription)
 	r.Post("/users/connexion", app.connexion)
+	r.Post("/admins/connexion", connexionAdmins)
 	r.Post("/paiement/initialisation", app.paiement)
+	r.Post("/abonnement",app.abonnement)
 	r.Get("/paiement/verifyPaiement", app.paiementVerify)
 	r.Get("/ISCONNECTED", isConnected)
 	r.Get("/isActive",app.isActive)
+    r.Post("/api/auth/facebook/callback", app.HandleMetaCallback)
+	r.With(app.AuthMetaMiddleware).Get("/api/facebook/response",app.metaResponse)
+	r.With(AdminsMiddleware).Get("/admins",app.dataAdmins)
 	r.Route("/protected", func(r chi.Router) {
 		r.Use(app.AuthMiddleware)
 		r.Get("/data", app.dataOnly)

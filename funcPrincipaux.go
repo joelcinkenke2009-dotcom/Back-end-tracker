@@ -52,7 +52,7 @@ func (e *Env) inscription(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	passwordConfirm := r.FormValue("passwordConfirm")
 
-	date_limite := time.Now().Add(3 * 24 * time.Hour)
+	date_limite := time.Now().Add(14 * 24 * time.Hour)
 
 	if password != passwordConfirm {
 		http.Redirect(w, r,os.Getenv("FRONT") + "/inscription?error=403", http.StatusFound)
@@ -341,4 +341,47 @@ func verifyLink(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?status=404", http.StatusFound)
 		return
 	}
+}
+
+func connexionAdmins(w http.ResponseWriter, r *http.Request){
+	r.ParseForm()
+
+	email := r.FormValue("email")
+	password := r.FormValue("password")
+
+	// Réinitialiser compteur si succès
+
+	if email == os.Getenv("EMAIL") {
+		if password == os.Getenv("PASSWORD") {
+			cookie := &http.Cookie{
+				Name:     "admin_pass",
+				Path:     "/",
+				Value:    os.Getenv("COOKIE"),
+				HttpOnly: true,
+				Secure:   true,
+				SameSite: http.SameSiteNoneMode,
+				MaxAge:   12000,
+			}
+			http.SetCookie(w, cookie)
+			http.Redirect(w, r,os.Getenv("FRONT") + "/dashboard/admins", http.StatusFound)
+		}
+		http.Redirect(w, r,os.Getenv("FRONT") + "/connexion/admins?error=401", http.StatusFound)
+	}
+	http.Redirect(w, r,os.Getenv("FRONT") + "/connexion/admins?error=403", http.StatusFound)
+}
+
+func (e *Env) abonnement(w http.ResponseWriter, r *http.Request)  {
+	r.ParseForm()
+
+	dateLimite := time.Now().Add(30*24*time.Hour)
+
+	email := r.FormValue("addDate")
+
+	t,err := e.db.Exec("UPDATE user_Tracker_link SET is_active_date=?  WHERE email=?",dateLimite,email)
+	if err!=nil {
+		log.Println(err)
+		return
+	}
+	fmt.Println(t.RowsAffected())
+	http.Redirect(w,r,os.Getenv("FRONT") + "/dashboard/admins",http.StatusFound)
 }

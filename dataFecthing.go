@@ -18,6 +18,8 @@ type UserInfos struct {
 }
 
 
+var date time.Time
+
 func(e *Env) dataOnly(w http.ResponseWriter, r *http.Request) {
 	user := cookieRecuperation(w, r, "user_id")
 	if user == "nil" {
@@ -92,22 +94,72 @@ func(e *Env) isActive(w http.ResponseWriter, r *http.Request)  {
 		})
 		return
 	}
-	var date time.Time
 
 	err := e.db.QueryRow(`SELECT is_active_date FROM user_Tracker_Link WHERE id=?`, cookie).Scan(&date)
 	if err != nil {
 		fmt.Println("Erreur récupération utilisateur :", err)
 		return
 	}
+	formate := date.Local().Format("02 January 2006 à 15:04 ")
 	if time.Now().Before(date) {
-		formate := date.Local().Format("02 January 2006 à 15:04 ")
 		json.NewEncoder(w).Encode(map[string]any{
 			"date_limite":formate,
 		})
 		return
 	}
-	formate := date.Local().Format("02 January 2006 à 15:04 ")
 	json.NewEncoder(w).Encode(map[string]any{
 		"expire":formate,
 	})
+}
+
+type AdminData struct{
+	FullName string `db:"full_name"`
+	Email string `db:"email"`
+	Id string `db:"id"`
+	IsActive string `db:"is_active_date"`
+}
+
+
+
+func AdminsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Methods", "GET")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("FRONT"))
+	
+		cookie := cookieRecuperation(w,r,"admin_pass")
+
+		if cookie == os.Getenv("COOKIE") {
+			next.ServeHTTP(w,r)
+			return 
+		} else {
+			json.NewEncoder(w).Encode(map[string]any{
+				"Acces":"NO",
+			})
+			http.Redirect(w,r,os.Getenv("FRONT") + "/dashbord/admins?err=401",http.StatusNotFound)		
+		}
+	})
+}
+
+
+func (e *Env) dataAdmins(w http.ResponseWriter, r *http.Request) {
+	
+	var admins AdminData 
+
+	data,err := e.db.Query("SELECT id,full_name,email,is_active_date FROM user_tracker_link")	
+	if err != nil {
+		fmt.Println("Erreur lors de la recuperation des données")
+		return
+	}
+	var allUsers []AdminData
+	for data.Next() {
+		err := data.Scan(&admins.Id,&admins.FullName,&admins.Email,&admins.IsActive)
+		if err != nil {
+			fmt.Println("Erreur lors de l'insertion")
+			return
+		}
+		allUsers = append(allUsers, admins)
+	}
+	json.NewEncoder(w).Encode(allUsers)
 }
