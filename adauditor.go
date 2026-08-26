@@ -41,7 +41,7 @@ func (e *Env) HandleMetaCallback(w http.ResponseWriter, r *http.Request) {
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Erreur Meta OAuth (Short Token): status %d", resp.StatusCode)
-		http.Error(w, "Échec de l'authentification Meta "+ err, http.StatusBadRequest)
+		http.Error(w, "Échec de l'authentification Meta "err, http.StatusBadRequest)
 		return
 	}
 
