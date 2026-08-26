@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"net/url"
 	"time"
 )
 
@@ -25,8 +24,7 @@ func (e *Env) HandleMetaCallback(w http.ResponseWriter, r *http.Request) {
 
 	appID := os.Getenv("META_APP_ID")
 	appSecret := os.Getenv("META_APP_SECRET")
-	redirectURL := os.Getenv("META_REDIRECT_URI")
-	redirectURI:= url.QueryEscape(redirectURL)
+	redirectURI := os.Getenv("META_REDIRECT_URI")
 
 	// 1. Échange du code contre un Short-Lived Access Token
 	urlShort := fmt.Sprintf(
@@ -43,7 +41,7 @@ func (e *Env) HandleMetaCallback(w http.ResponseWriter, r *http.Request) {
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Erreur Meta OAuth (Short Token): status %d", resp.StatusCode)
-		http.Error(w, "Échec de l'authentification Meta", http.StatusBadRequest)
+		http.Error(w, "Échec de l'authentification Meta "+ err, http.StatusBadRequest)
 		return
 	}
 
