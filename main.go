@@ -102,7 +102,7 @@ func main() {
 	r.Get("/paiement/verifyPaiement", app.paiementVerify)
 	r.Get("/ISCONNECTED", isConnected)
 	r.Get("/isActive",app.isActive)
-    r.Post("/api/auth/facebook/callback", app.HandleMetaCallback)
+    r.Get("/api/auth/facebook/callback", app.HandleMetaCallback)
 	r.With(app.AuthMetaMiddleware).Get("/api/facebook/response",app.metaResponse)
 	r.With(AdminsMiddleware).Get("/admins",app.dataAdmins)
 	r.Route("/protected", func(r chi.Router) {
