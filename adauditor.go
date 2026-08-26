@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"net/url"
 	"time"
 )
 
@@ -24,7 +25,8 @@ func (e *Env) HandleMetaCallback(w http.ResponseWriter, r *http.Request) {
 
 	appID := os.Getenv("META_APP_ID")
 	appSecret := os.Getenv("META_APP_SECRET")
-	redirectURI := os.Getenv("META_REDIRECT_URI")
+	redirectURL := os.Getenv("META_REDIRECT_URI")
+	redirectURI:= url.QueryEscape(redirectURL)
 
 	// 1. Échange du code contre un Short-Lived Access Token
 	urlShort := fmt.Sprintf(
@@ -88,11 +90,7 @@ func (e *Env) HandleMetaCallback(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Sauvegarde ou mise à jour du token en base de données (compatible PostgreSQL)
 	query := `
-		INSERT INTO user_meta_ad (user_id, access_token, expires_at) 
-		VALUES ($1, $2, $3)
-		ON CONFLICT (user_id) 
-		DO UPDATE SET access_token = EXCLUDED.access_token, expires_at = EXCLUDED.expires_at;
-	`
+		INSERT INTO user_meta_ad (user_id, access_token, expires_at) VALUES (?, ?, ?)`
 	_, err = e.db.Exec(query, user, longTokenRes.AccessToken, expire)
 	if err != nil {
 		log.Printf("Erreur lors de l'insertion DB: %v", err)
