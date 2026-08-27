@@ -52,13 +52,12 @@ func(e *Env) createTables(){
 	}
 
 	createTableMeta := `CREATE TABLE IF NOT EXISTS user_meta_ads (
-		id INT AUTO_INCREMENT,
-		user_id VARCHAR(255),
-		access_token TEXT,
-		expires_at TIMESTAMP,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		PRIMARY KEY (user_id)
-	)`;
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(255) UNIQUE NOT NULL,
+    access_token TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`
 	_, err =  e.db.Exec(createTableMeta)
 	if err != nil {
 		panic(err)
