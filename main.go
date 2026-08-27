@@ -25,9 +25,10 @@ func(e *Env) createTables(){
 		first_name VARCHAR(250),
 		full_name VARCHAR(250),
 		password VARCHAR(255),
-		email VARCHAR(250) UNIQUE NOT NULL,
+		email VARCHAR(250) UNIQUE NOT NULL ,
 		is_active_date TIMESTAMP,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (email)
 	);`
 	_, err :=  e.db.Exec(createTable)
 	if err != nil {
@@ -55,7 +56,8 @@ func(e *Env) createTables(){
 		user_id VARCHAR(255),
 		access_token TEXT,
 		expires_at TIMESTAMP,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (user_id)
 	)`;
 	_, err =  e.db.Exec(createTableMeta)
 	if err != nil {
