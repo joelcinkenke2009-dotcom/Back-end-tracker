@@ -50,10 +50,10 @@ func(e *Env) createTables(){
 		panic(err)
 	}
 
-	createTableMeta := `CREATE TABLE IF NOT EXISTS user_meta_ad (
+	createTableMeta := `CREATE TABLE IF NOT EXISTS user_meta_ads (
 		id INT AUTO_INCREMENT PRIMARY KEY,
 		user_id VARCHAR(255),
-		access_token VARCHAR(255),
+		access_token TEXT,
 		expires_at TIMESTAMP,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`;
