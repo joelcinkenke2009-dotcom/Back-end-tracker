@@ -111,7 +111,7 @@ func (e *Env) metaResponse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Non autorisé", http.StatusUnauthorized)
 		return
 	}
-
+log.Println(user)
 	var accessToken string
 	err := e.db.QueryRow(`SELECT access_token FROM user_meta_ads WHERE user_id=?`, user).Scan(&accessToken)
 	if err != nil {
@@ -216,9 +216,6 @@ func (e *Env) metaResponse(w http.ResponseWriter, r *http.Request) {
 
 		adList = append(adList, item)
 	}
-log.Println(user)
-		
-
 
 	json.NewEncoder(w).Encode(adList)
 }
