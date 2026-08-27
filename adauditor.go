@@ -216,7 +216,7 @@ func (e *Env) metaResponse(w http.ResponseWriter, r *http.Request) {
 
 		adList = append(adList, item)
 	}
-log.Printf(adList)
+log.Println(adList)
 		
 
 
