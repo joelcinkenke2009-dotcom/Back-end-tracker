@@ -90,7 +90,7 @@ func(e *Env) AuthMetaMiddleware(next http.Handler) http.Handler {
 
 		if time.Now().Before(date) {
 			var accesToken string
-			err := e.db.QueryRow(`SELECT access_token FROM user_meta_ad_connect WHERE id=?`,cookie).Scan(&accesToken)
+			err := e.db.QueryRow(`SELECT access_token FROM user_meta_ad_connect WHERE user_id=?`,cookie).Scan(&accesToken)
 			if err != nil {
 				fmt.Println("Erreur récupération utilisateur :", err)
 				json.NewEncoder(w).Encode(map[string]any{
