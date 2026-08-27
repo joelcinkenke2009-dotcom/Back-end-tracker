@@ -88,7 +88,7 @@ func (e *Env) HandleMetaCallback(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Sauvegarde ou mise à jour du token en base de données (compatible PostgreSQL)
 	query := `
-		INSERT INTO user_meta_ad (user_id, access_token, expires_at) VALUES (?, ?, ?)`
+		INSERT INTO user_meta_ads (user_id, access_token, expires_at) VALUES (?, ?, ?)`
 	_, err = e.db.Exec(query, user, longTokenRes.AccessToken, expire)
 	if err != nil {
 		log.Printf("Erreur lors de l'insertion DB: %v", err)
@@ -113,7 +113,7 @@ func (e *Env) metaResponse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var accessToken string
-	err := e.db.QueryRow(`SELECT access_token FROM user_meta_ad WHERE user_id=?`, user).Scan(&accessToken)
+	err := e.db.QueryRow(`SELECT access_token FROM user_meta_ads WHERE user_id=?`, user).Scan(&accessToken)
 	if err != nil {
 		fmt.Println("Erreur récupération utilisateur :", err)
 		http.Error(w, "Utilisateur introuvable", http.StatusUnauthorized)
