@@ -107,7 +107,7 @@ func (e *Env) metaResponse(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", os.Getenv("FRONT"))
 
 	user := cookieRecuperation(w, r, "user_id")
-	if user == "nil" || user == "" {
+	if user == "nil" {
 		http.Error(w, "Non autorisé", http.StatusUnauthorized)
 		return
 	}
@@ -216,7 +216,7 @@ func (e *Env) metaResponse(w http.ResponseWriter, r *http.Request) {
 
 		adList = append(adList, item)
 	}
-log.Println(adList)
+log.Println(user)
 		
 
 
