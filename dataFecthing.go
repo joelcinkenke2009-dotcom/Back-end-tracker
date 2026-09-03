@@ -147,7 +147,7 @@ func (e *Env) dataAdmins(w http.ResponseWriter, r *http.Request) {
 	
 	var admins AdminData 
 
-	data,err := e.db.Query("SELECT id,full_name,email,is_active_date FROM user_tracker_link")	
+	data,err := e.db.Query("SELECT id,full_name,email,is_active_date FROM user_Tracker_Link")	
 	if err != nil {
 		fmt.Printf("Erreur lors de la recuperation des données %s",err)
 		return
