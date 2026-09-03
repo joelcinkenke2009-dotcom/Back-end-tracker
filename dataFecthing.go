@@ -149,7 +149,7 @@ func (e *Env) dataAdmins(w http.ResponseWriter, r *http.Request) {
 
 	data,err := e.db.Query("SELECT id,full_name,email,is_active_date FROM user_tracker_link")	
 	if err != nil {
-		fmt.Println("Erreur lors de la recuperation des données")
+		fmt.Printf("Erreur lors de la recuperation des données %s",err)
 		return
 	}
 	var allUsers []AdminData
