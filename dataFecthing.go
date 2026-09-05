@@ -156,7 +156,7 @@ func (e *Env) dataAdmins(w http.ResponseWriter, r *http.Request) {
 	for data.Next() {
 		err := data.Scan(&admins.Id,&admins.FullName,&admins.Email,&admins.IsActive)
 		if err != nil {
-			fmt.Println("Erreur lors de l'insertion")
+			fmt.Printf("Erreur lors de l'insertion %s",err)
 			return
 		}
 		allUsers = append(allUsers, admins)
