@@ -98,7 +98,7 @@ func (e *Env) inscription(w http.ResponseWriter, r *http.Request) {
 
 
 	http.SetCookie(w, cookie)
-	http.Redirect(w, r,os.Getenv("FRONT") + "/dashboard", http.StatusFound)
+	http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard", http.StatusSeeOther) // Statut 303
 }
 
 var (
@@ -159,7 +159,7 @@ func (e *Env) connexion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, cookie)
-	http.Redirect(w, r,os.Getenv("FRONT") + "/dashboard", http.StatusFound)
+	http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard", http.StatusSeeOther) // Statut 303
 }
 
 // Décrémente ou initialise le compteur et programme reset après 24h
