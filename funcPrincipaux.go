@@ -73,11 +73,11 @@ func (e *Env) inscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cookieId := cookieRecuperation(w, r, "user_id")
+	/*cookieId := cookieRecuperation(w, r, "user_id")
 	if cookieId != "nil" {
 		http.Redirect(w, r,os.Getenv("FRONT") + "/inscription?error=402", http.StatusFound)
 		return
-	}
+	}*/
 
 	_, err = e.db.Exec("INSERT INTO user_Tracker_Link (id,name,first_name,full_name,email,password,is_active_date) VALUES (?,?,?,?,?,?,?)", id, name, firstName, fullName, email, hash, date_limite)
 	if err != nil {
