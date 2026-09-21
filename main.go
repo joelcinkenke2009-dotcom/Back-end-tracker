@@ -38,7 +38,7 @@ func(e *Env) createTables(){
 	createTableLink := `CREATE TABLE IF NOT EXISTS link_Tracker_Link (
 		id INT AUTO_INCREMENT PRIMARY KEY,
 		user_id VARCHAR(250),
-		url VARCHAR(250) UNIQUE,
+		url VARCHAR(250),
 		slug VARCHAR(250),
 		urlGenerate VARCHAR(250),
 		click_total INT DEFAULT 0,
