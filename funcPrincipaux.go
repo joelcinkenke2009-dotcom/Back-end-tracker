@@ -52,7 +52,7 @@ func (e *Env) inscription(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	passwordConfirm := r.FormValue("passwordConfirm")
 
-	date_limite := time.Now().Add(14 * 24 * time.Hour)
+	date_limite := time.Now().Add(7 * 24 * time.Hour)
 
 	if password != passwordConfirm {
 		http.Redirect(w, r,os.Getenv("FRONT") + "/inscription?error=403", http.StatusFound)
