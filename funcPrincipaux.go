@@ -378,7 +378,7 @@ func (e *Env) abonnement(w http.ResponseWriter, r *http.Request)  {
 
 	email := r.FormValue("addDate")
 
-	t,err := e.db.Exec("UPDATE user_Tracker_link SET is_active_date=?  WHERE email=?",dateLimite,email)
+	t,err := e.db.Exec("UPDATE user_Tracker_Link SET is_active_date=?  WHERE email=?",dateLimite,email)
 	if err!=nil {
 		log.Println(err)
 		return
