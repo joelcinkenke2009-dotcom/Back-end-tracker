@@ -179,9 +179,9 @@ log.Println(user)
 	adAccountID := accRes.Data[0].ID
 
 	// 2. Récupération des publicités avec limite à 100
-	fields := "id,name,status,insights.date_preset(last_30d){spend,impressions,clicks,cpc,ctr}"
+	fields := "id,name,status,insights.date_preset(last_3d){spend,impressions,clicks,cpc,ctr}"
 	urlAds := fmt.Sprintf(
-		"https://graph.facebook.com/v19.0/%s/ads?fields=%s&limit=100&access_token=%s",
+		"https://graph.facebook.com/v19.0/%s/ads?fields=%s&limit=3&access_token=%s",
 		adAccountID, fields, accessToken,
 	)
 
