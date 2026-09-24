@@ -216,6 +216,7 @@ log.Println(user)
 
 		adList = append(adList, item)
 	}
+	log.Println(adList)
 
 	json.NewEncoder(w).Encode(adList)
 }
