@@ -169,7 +169,7 @@ log.Println(user)
 	}
 	defer respAcc.Body.Close()
 
-	log.Println(respAcc)
+	log.Println(urlAccount)
 	var accRes AccountResponse
 	if err := json.NewDecoder(respAcc.Body).Decode(&accRes); err != nil || len(accRes.Data) == 0 {
 		http.Error(w, "Aucun compte publicitaire trouvé", http.StatusNotFound)
@@ -179,9 +179,9 @@ log.Println(user)
 	adAccountID := accRes.Data[0].ID
 
 	// 2. Récupération des publicités avec limite à 100
-	fields := "id,name,status,insights.date_preset(last_3d){spend,impressions,clicks,cpc,ctr}"
+	fields := "id,name,status,insights.date_preset(last_1d){spend,impressions,clicks,cpc,ctr}"
 	urlAds := fmt.Sprintf(
-		"https://graph.facebook.com/v19.0/%s/ads?fields=%s&limit=3&access_token=%s",
+		"https://graph.facebook.com/v19.0/%s/ads?fields=%s&limit=1&access_token=%s",
 		adAccountID, fields, accessToken,
 	)
 
