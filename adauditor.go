@@ -14,6 +14,45 @@ type TokenResponse struct {
 	TokenType   string `json:"token_type"`
 	ExpiresIn   int    `json:"expires_in"`
 }
+type AdAccount struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	type AccountResponse struct {
+		Data []AdAccount `json:"data"`
+	}
+
+	type InsightData struct {
+		Spend       string `json:"spend"`
+		Impressions string `json:"impressions"`
+		Clicks      string `json:"clicks"`
+		Cpc         string `json:"cpc"`
+		Ctr         string `json:"ctr"`
+	}
+	type InsightsResponse struct {
+		Data []InsightData `json:"data"`
+	}
+
+	type AdItem struct {
+		ID       string           `json:"id"`
+		Name     string           `json:"name"`
+		Status   string           `json:"status"`
+		Insights InsightsResponse `json:"insights"`
+	}
+	type AdsResponse struct {
+		Data []AdItem `json:"data"`
+	}
+
+	type SingleAdResult struct {
+		AdID        string `json:"ad_id"`
+		AdName      string `json:"ad_name"`
+		Status      string `json:"status"`
+		Spend       string `json:"spend"`
+		Impressions string `json:"impressions"`
+		Clicks      string `json:"clicks"`
+		Cpc         string `json:"cpc"`
+		Ctr         string `json:"ctr"`
+	}
 
 func (e *Env) HandleMetaCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
@@ -119,46 +158,7 @@ log.Println(user)
 		http.Error(w, "Utilisateur introuvable", http.StatusUnauthorized)
 		return
 	}
-
-	type AdAccount struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-	type AccountResponse struct {
-		Data []AdAccount `json:"data"`
-	}
-
-	type InsightData struct {
-		Spend       string `json:"spend"`
-		Impressions string `json:"impressions"`
-		Clicks      string `json:"clicks"`
-		Cpc         string `json:"cpc"`
-		Ctr         string `json:"ctr"`
-	}
-	type InsightsResponse struct {
-		Data []InsightData `json:"data"`
-	}
-
-	type AdItem struct {
-		ID       string           `json:"id"`
-		Name     string           `json:"name"`
-		Status   string           `json:"status"`
-		Insights InsightsResponse `json:"insights"`
-	}
-	type AdsResponse struct {
-		Data []AdItem `json:"data"`
-	}
-
-	type SingleAdResult struct {
-		AdID        string `json:"ad_id"`
-		AdName      string `json:"ad_name"`
-		Status      string `json:"status"`
-		Spend       string `json:"spend"`
-		Impressions string `json:"impressions"`
-		Clicks      string `json:"clicks"`
-		Cpc         string `json:"cpc"`
-		Ctr         string `json:"ctr"`
-	}
+	log.Println(accessToken)
 
 	// 1. Récupération du compte publicitaire
 	urlAccount := fmt.Sprintf("https://graph.facebook.com/v19.0/me/adaccounts?fields=id,name&access_token=%s", accessToken)
@@ -193,6 +193,7 @@ log.Println(user)
 
 	var adsRes AdsResponse
 	json.NewDecoder(respAds.Body).Decode(&adsRes)
+	log.Println(adsRes.Data)
 
 	// Initalisation explicite d'un tableau vide pour éviter de renvoyer "null"
 	adList := make([]SingleAdResult, 0)
