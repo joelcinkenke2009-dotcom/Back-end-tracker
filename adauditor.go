@@ -169,6 +169,7 @@ log.Println(user)
 	}
 	defer respAcc.Body.Close()
 
+	log.Println(respAcc)
 	var accRes AccountResponse
 	if err := json.NewDecoder(respAcc.Body).Decode(&accRes); err != nil || len(accRes.Data) == 0 {
 		http.Error(w, "Aucun compte publicitaire trouvé", http.StatusNotFound)
