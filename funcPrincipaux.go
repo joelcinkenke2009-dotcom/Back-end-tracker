@@ -220,18 +220,44 @@ func (e *Env) createLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (e *Env) redirectLink(w http.ResponseWriter, r *http.Request) {
-
 	slug := chi.URLParam(r, "slug")
 
 	var url string
-
 	err := e.db.QueryRow("SELECT url FROM link_Tracker_Link WHERE slug=?", slug).Scan(&url)
 	if err != nil {
 		log.Printf("Erreur lors de la recuperaton %s du slug=%s", err, slug)
-		http.Redirect(w, r,os.Getenv("FRONT") , http.StatusFound)
+		http.Redirect(w, r, os.Getenv("FRONT"), http.StatusFound)
 		return
 	}
 
+	// 1. Détection des Bots via le User-Agent
+	ua := r.Header.Get("User-Agent")
+	uaLower := strings.ToLower(ua)
+
+	botKeywords := []string{
+		"bot", "crawler", "spider", "facebookexternalhit",
+		"facebot", "meta-externalagent", "pingdom", "preview",
+	}
+
+	isBot := false
+	for _, keyword := range botKeywords {
+		if strings.Contains(uaLower, keyword) {
+			isBot = true
+			break
+		}
+	}
+
+	// 2. Vérification de l'en-tête de préchargement (prefetch)
+	isPrefetch := strings.ToLower(r.Header.Get("Purpose")) == "prefetch" ||
+		strings.ToLower(r.Header.Get("Sec-Purpose")) == "prefetch"
+
+	// Si c'est un bot ou du préchargement, on redirige SANS enregistrer le clic
+	if isBot || isPrefetch {
+		http.Redirect(w, r, url, http.StatusFound)
+		return
+	}
+
+	// 3. Test d'inaccessibilité du site cible
 	res, err := http.Head(url)
 	if err != nil || res.StatusCode >= 404 {
 		http.Error(w, "Ce site est inaccessible ou invalide", http.StatusBadRequest)
@@ -239,24 +265,24 @@ func (e *Env) redirectLink(w http.ResponseWriter, r *http.Request) {
 	}
 	defer res.Body.Close()
 
-	ua := r.Header.Get("User-Agent")
-	isMobile := strings.Contains(ua, "Android") || strings.Contains(strings.ToLower(ua), "iphone")
+	// 4. Enregistrement du clic pour les vrais utilisateurs
+	isMobile := strings.Contains(uaLower, "android") || strings.Contains(uaLower, "iphone")
+	
+	var query string
 	if isMobile {
-		_, err := e.db.Exec("UPDATE link_Tracker_Link SET click_total=click_total+1,click_mobile=click_mobile+1 WHERE slug=? AND url=?", slug, url)
-		if err != nil {
-			log.Println("Erreur lors de la modification: ", err)
-			return
-		}
-		http.Redirect(w, r, url, http.StatusFound)
-		return
+		query = "UPDATE link_Tracker_Link SET click_total=click_total+1, click_mobile=click_mobile+1 WHERE slug=? AND url=?"
+	} else {
+		query = "UPDATE link_Tracker_Link SET click_total=click_total+1, click_pc=click_pc+1 WHERE slug=? AND url=?"
 	}
-	_,err = e.db.Exec("UPDATE link_Tracker_Link SET click_total=click_total+1,click_pc=click_pc+1 WHERE slug=? AND url=?", slug, url)
+
+	_, err = e.db.Exec(query, slug, url)
 	if err != nil {
 		log.Println("Erreur lors de la modification: ", err)
-		return
 	}
+
 	http.Redirect(w, r, url, http.StatusFound)
 }
+
 
 // type SlugDelete struct {
 // 	Slug     string `json:"slugDelete"`
