@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -219,6 +220,125 @@ func (e *Env) createLink(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard", http.StatusFound)
 }
 
+// Mots-clés présents dans le User-Agent des bots, robots d'aperçu de liens,
+// outils en ligne de commande et navigateurs automatisés.
+var botKeywords = []string{
+	// Robots génériques
+	"bot", "crawler", "spider", "crawl", "slurp", "archiver", "scanner",
+	// Aperçus de liens des réseaux sociaux et messageries
+	"facebookexternalhit", "facebot", "meta-externalagent", "meta-externalfetcher",
+	// (Telegram, Pinterest et Snapchat ont des navigateurs intégrés à leurs
+	// applis : leurs robots sont déjà détectés par "bot" ou "preview".)
+	"whatsapp", "skypeuripreview", "embedly", "preview",
+	"vkshare", "iframely", "outbrain",
+	// Outils et bibliothèques HTTP
+	"curl", "wget", "python-requests", "python-urllib", "aiohttp", "httpx",
+	"go-http-client", "okhttp", "axios", "node-fetch", "undici", "java/",
+	"apache-httpclient", "libwww-perl", "httpclient", "postman", "insomnia",
+	// Navigateurs automatisés
+	"headlesschrome", "phantomjs", "selenium", "puppeteer", "playwright", "lighthouse",
+	// Surveillance de disponibilité
+	"pingdom", "uptimerobot", "statuscake", "monitor", "check_http",
+}
+
+// isBotRequest indique si la requête provient vraisemblablement d'un bot
+// ou d'un préchargement, auquel cas le clic ne doit pas être compté.
+func isBotRequest(r *http.Request) bool {
+	ua := strings.ToLower(strings.TrimSpace(r.Header.Get("User-Agent")))
+
+	// Un vrai navigateur envoie toujours un User-Agent.
+	if ua == "" {
+		return true
+	}
+	for _, keyword := range botKeywords {
+		if strings.Contains(ua, keyword) {
+			return true
+		}
+	}
+
+	// Préchargement (Chrome, Safari, Firefox).
+	purpose := strings.ToLower(r.Header.Get("Purpose") + " " + r.Header.Get("Sec-Purpose") + " " + r.Header.Get("X-Purpose") + " " + r.Header.Get("X-Moz"))
+	if strings.Contains(purpose, "prefetch") || strings.Contains(purpose, "preview") {
+		return true
+	}
+
+	// Les navigateurs envoient presque toujours un en-tête Accept.
+	if r.Header.Get("Accept") == "" {
+		return true
+	}
+	return false
+}
+
+// isMobileRequest détecte les téléphones et tablettes.
+func isMobileRequest(r *http.Request) bool {
+	if r.Header.Get("Sec-CH-UA-Mobile") == "?1" {
+		return true
+	}
+	ua := strings.ToLower(r.Header.Get("User-Agent"))
+	for _, k := range []string{"android", "iphone", "ipad", "ipod", "mobile", "blackberry", "opera mini", "iemobile", "windows phone"} {
+		if strings.Contains(ua, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// clientIP récupère l'IP du visiteur, y compris derrière un proxy.
+func clientIP(r *http.Request) string {
+	if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); ip != "" {
+		return ip
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		return strings.TrimSpace(strings.Split(xff, ",")[0])
+	}
+	if ip := strings.TrimSpace(r.Header.Get("X-Real-IP")); ip != "" {
+		return ip
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// Anti-doublon : un même visiteur (IP + User-Agent) n'est compté qu'une fois
+// par lien pendant clickDedupWindow.
+const clickDedupWindow = 30 * time.Second
+
+var (
+	recentClicks   = make(map[string]time.Time)
+	recentClicksMu sync.Mutex
+)
+
+func init() {
+	// Nettoyage périodique pour éviter que la map grossisse indéfiniment.
+	go func() {
+		for range time.Tick(time.Minute) {
+			now := time.Now()
+			recentClicksMu.Lock()
+			for k, t := range recentClicks {
+				if now.Sub(t) > clickDedupWindow {
+					delete(recentClicks, k)
+				}
+			}
+			recentClicksMu.Unlock()
+		}
+	}()
+}
+
+// isDuplicateClick renvoie true si ce visiteur a déjà cliqué sur ce lien récemment.
+func isDuplicateClick(slug string, r *http.Request) bool {
+	key := slug + "|" + clientIP(r) + "|" + r.Header.Get("User-Agent")
+	now := time.Now()
+	recentClicksMu.Lock()
+	defer recentClicksMu.Unlock()
+	if t, ok := recentClicks[key]; ok && now.Sub(t) < clickDedupWindow {
+		return true
+	}
+	recentClicks[key] = now
+	return false
+}
+
 func (e *Env) redirectLink(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 
@@ -230,46 +350,28 @@ func (e *Env) redirectLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Détection des Bots via le User-Agent
-	ua := r.Header.Get("User-Agent")
-	uaLower := strings.ToLower(ua)
+	// Empêche les navigateurs et proxys de mettre la redirection en cache,
+	// sinon les clics suivants ne passeraient plus par le serveur.
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 
-	botKeywords := []string{
-		"bot", "crawler", "spider", "facebookexternalhit",
-		"facebot", "meta-externalagent", "pingdom", "preview",
-	}
-
-	isBot := false
-	for _, keyword := range botKeywords {
-		if strings.Contains(uaLower, keyword) {
-			isBot = true
-			break
-		}
-	}
-
-	// 2. Vérification de l'en-tête de préchargement (prefetch)
-	isPrefetch := strings.ToLower(r.Header.Get("Purpose")) == "prefetch" ||
-		strings.ToLower(r.Header.Get("Sec-Purpose")) == "prefetch"
-
-	// Si c'est un bot ou du préchargement, on redirige SANS enregistrer le clic
-	if isBot || isPrefetch {
+	// 1. Bots, outils et préchargements : on redirige SANS enregistrer le clic.
+	if isBotRequest(r) {
 		http.Redirect(w, r, url, http.StatusFound)
 		return
 	}
 
-	// 3. Test d'inaccessibilité du site cible
-	res, err := http.Head(url)
-	if err != nil || res.StatusCode >= 404 {
-		http.Error(w, "Ce site est inaccessible ou invalide", http.StatusBadRequest)
+	// 2. Clics répétés du même visiteur : redirection sans comptage.
+	if isDuplicateClick(slug, r) {
+		http.Redirect(w, r, url, http.StatusFound)
 		return
 	}
-	defer res.Body.Close()
 
-	// 4. Enregistrement du clic pour les vrais utilisateurs
-	isMobile := strings.Contains(uaLower, "android") || strings.Contains(uaLower, "iphone")
-	
+	// 3. Enregistrement du clic pour les vrais utilisateurs.
+	// La disponibilité du site cible est vérifiée à la création du lien
+	// (verifyLink) et non plus à chaque clic : un HEAD ici ralentissait chaque
+	// visite et bloquait les sites qui refusent la méthode HEAD (405).
 	var query string
-	if isMobile {
+	if isMobileRequest(r) {
 		query = "UPDATE link_Tracker_Link SET click_total=click_total+1, click_mobile=click_mobile+1 WHERE slug=? AND url=?"
 	} else {
 		query = "UPDATE link_Tracker_Link SET click_total=click_total+1, click_pc=click_pc+1 WHERE slug=? AND url=?"
@@ -370,31 +472,45 @@ func verifyLink(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func connexionAdmins(w http.ResponseWriter, r *http.Request){
+func connexionAdmins(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
 	email := r.FormValue("email")
 	password := r.FormValue("password")
 
-	// Réinitialiser compteur si succès
+	adminEmail := os.Getenv("EMAIL")
+	adminPassword := os.Getenv("PASSWORD")
 
-	if email == os.Getenv("EMAIL") {
-		if password == os.Getenv("PASSWORD") {
-			cookie := &http.Cookie{
-				Name:     "admin_pass",
-				Path:     "/",
-				Value:    os.Getenv("COOKIE"),
-				HttpOnly: true,
-				Secure:   true,
-				SameSite: http.SameSiteNoneMode,
-				MaxAge:   12000,
-			}
-			http.SetCookie(w, cookie)
-			http.Redirect(w, r,os.Getenv("FRONT") + "/dashboard/admins", http.StatusFound)
-		}
-		http.Redirect(w, r,os.Getenv("FRONT") + "/connexion/admins?error=401", http.StatusFound)
+	// Refuse si la configuration admin est absente.
+	if adminEmail == "" || adminPassword == "" {
+		http.Redirect(w, r, os.Getenv("FRONT")+"/connexion/admins?error=403", http.StatusFound)
+		return
 	}
-	http.Redirect(w, r,os.Getenv("FRONT") + "/connexion/admins?error=403", http.StatusFound)
+
+	// Comparaison à temps constant pour éviter les attaques temporelles.
+	emailOK := subtle.ConstantTimeCompare([]byte(email), []byte(adminEmail)) == 1
+	passwordOK := subtle.ConstantTimeCompare([]byte(password), []byte(adminPassword)) == 1
+
+	if !emailOK {
+		http.Redirect(w, r, os.Getenv("FRONT")+"/connexion/admins?error=403", http.StatusFound)
+		return
+	}
+	if !passwordOK {
+		http.Redirect(w, r, os.Getenv("FRONT")+"/connexion/admins?error=401", http.StatusFound)
+		return
+	}
+
+	cookie := &http.Cookie{
+		Name:     "admin_pass",
+		Path:     "/",
+		Value:    os.Getenv("COOKIE"),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
+		MaxAge:   12000,
+	}
+	http.SetCookie(w, cookie)
+	http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard/admins", http.StatusFound)
 }
 
 func (e *Env) abonnement(w http.ResponseWriter, r *http.Request)  {

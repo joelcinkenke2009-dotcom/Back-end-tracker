@@ -99,7 +99,7 @@ func main() {
 	r.Post("/users/connexion", app.connexion)
 	r.Post("/admins/connexion", connexionAdmins)
 	r.Post("/paiement/initialisation", app.paiement)
-	r.Post("/abonnement",app.abonnement)
+	r.With(AdminsMiddleware).Post("/abonnement", app.abonnement)
 	r.Get("/paiement/verifyPaiement", app.paiementVerify)
 	r.Get("/ISCONNECTED", isConnected)
 	r.Get("/isActive",app.isActive)

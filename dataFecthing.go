@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -129,15 +130,16 @@ func AdminsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("FRONT"))
 	
 		cookie := cookieRecuperation(w,r,"admin_pass")
+		expected := os.Getenv("COOKIE")
 
-		if cookie == os.Getenv("COOKIE") {
+		if expected != "" && subtle.ConstantTimeCompare([]byte(cookie), []byte(expected)) == 1 {
 			next.ServeHTTP(w,r)
 			return 
 		} else {
+			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]any{
 				"Acces":"NO",
-			})
-			http.Redirect(w,r,os.Getenv("FRONT") + "/dashbord/admins?err=401",http.StatusNotFound)		
+			})		
 		}
 	})
 }
