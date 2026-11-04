@@ -252,6 +252,11 @@ func (e *Env) verifySubscriptionPayment(plan string) http.HandlerFunc {
 			return
 		}
 
+		var pendingUser, pendingPlan string
+		if err := e.db.QueryRowContext(r.Context(), `SELECT user_id, plan FROM pending_subscription_payments WHERE cart_id=? AND expires_at > NOW()`, panier).Scan(&pendingUser, &pendingPlan); err != nil || pendingPlan != plan {
+			http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?payment=unauthorized", http.StatusFound)
+			return
+		}
 		apiURL := strings.TrimRight(os.Getenv("API_URL"), "/") + "/" + panier
 		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, apiURL, nil)
 		if err != nil {
