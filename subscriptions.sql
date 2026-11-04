@@ -21,3 +21,12 @@ SELECT id FROM user_Tracker_Link WHERE id IS NOT NULL AND id <> '';
 
 -- Paid plans are activated only after the payment provider confirms status=completed.
 -- Each paid subscription lasts 30 days; expiration downgrades the account to free.
+
+CREATE TABLE IF NOT EXISTS pending_subscription_payments (
+    cart_id VARCHAR(255) NOT NULL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    plan VARCHAR(24) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_pending_subscription_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
