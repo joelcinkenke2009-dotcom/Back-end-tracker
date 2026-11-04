@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -25,11 +26,9 @@ func setJSONHeaders(w http.ResponseWriter) {
 }
 
 func parsePagination(r *http.Request) (limit, offset int) {
-	const (
-		defaultLimit = 500
-		maxLimit     = 1000
-	)
-	limit = defaultLimit
+	const maxLimit = 1000
+	// No limit preserves the legacy response until the frontend opts into pages.
+	limit = 0
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 			limit = parsed
@@ -61,13 +60,17 @@ func (e *Env) dataOnly(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit, offset := parsePagination(r)
-	// Fetch one extra row to tell the frontend whether another page exists.
-	rows, err := e.db.QueryContext(r.Context(), `
-		SELECT url, slug, urlGenerate, click_total, click_mobile, click_pc
-		FROM link_Tracker_Link
-		WHERE user_id = ?
-		ORDER BY click_total DESC, id DESC
-		LIMIT ? OFFSET ?`, user, limit+1, offset)
+	query := "SELECT url, slug, urlGenerate, click_total, click_mobile, click_pc " +
+		"FROM link_Tracker_Link WHERE user_id = ? ORDER BY click_total DESC, id DESC"
+	var rows *sql.Rows
+	var err error
+	if limit > 0 {
+		// Fetch one extra row to tell the frontend whether another page exists.
+		rows, err = e.db.QueryContext(r.Context(), query+" LIMIT ? OFFSET ?", user, limit+1, offset)
+	} else {
+		// Legacy clients still receive every link until they request pagination.
+		rows, err = e.db.QueryContext(r.Context(), query, user)
+	}
 	if err != nil {
 		fmt.Println("Erreur récupération des liens :", err)
 		http.Error(w, `{"error":"data_unavailable"}`, http.StatusInternalServerError)
@@ -75,7 +78,10 @@ func (e *Env) dataOnly(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	links := make([]UserInfos, 0, limit)
+	links := make([]UserInfos, 0)
+	if limit > 0 {
+		links = make([]UserInfos, 0, limit)
+	}
 	hasMore := false
 	for rows.Next() {
 		var item UserInfos
@@ -84,7 +90,7 @@ func (e *Env) dataOnly(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"data_unavailable"}`, http.StatusInternalServerError)
 			return
 		}
-		if len(links) == limit {
+		if limit > 0 && len(links) == limit {
 			hasMore = true
 			break
 		}
@@ -96,11 +102,13 @@ func (e *Env) dataOnly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("X-Has-More", strconv.FormatBool(hasMore))
-	w.Header().Set("X-Limit", strconv.Itoa(limit))
-	w.Header().Set("X-Offset", strconv.Itoa(offset))
-	if hasMore {
-		w.Header().Set("Link", fmt.Sprintf(`<?limit=%d&offset=%d>; rel="next"`, limit, offset+limit))
+	if limit > 0 {
+		w.Header().Set("X-Has-More", strconv.FormatBool(hasMore))
+		w.Header().Set("X-Limit", strconv.Itoa(limit))
+		w.Header().Set("X-Offset", strconv.Itoa(offset))
+		if hasMore {
+			w.Header().Set("Link", fmt.Sprintf(`<?limit=%d&offset=%d>; rel="next"`, limit, offset+limit))
+		}
 	}
 
 	// Keep the existing JSON array response so current Vue components remain
