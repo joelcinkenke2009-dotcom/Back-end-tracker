@@ -80,10 +80,16 @@ func (e *Env) inscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = e.db.Exec("INSERT INTO user_Tracker_Link (id,name,first_name,full_name,email,password,is_active_date) VALUES (?,?,?,?,?,?,?)", id, name, firstName, fullName, email, hash, date_limite)
+	_, err = e.db.Exec("INSERT INTO user_Tracker_Link (id,name,first_name,full_name,email,password,is_active_date,status) VALUES (?,?,?,?,?,?,?,1)", id, name, firstName, fullName, email, hash, date_limite)
 	if err != nil {
 		log.Printf("erreur lors de l'insertion %s de l'email=%s", err, email)
 		http.Redirect(w, r,os.Getenv("FRONT") + "/inscription?error=401", http.StatusFound)
+		return
+	}
+
+	if err := e.ensureUserSubscription(id); err != nil {
+		log.Printf("initialisation abonnement gratuit impossible pour %s: %v", id, err)
+		http.Redirect(w, r, os.Getenv("FRONT")+"/inscription?error=401", http.StatusFound)
 		return
 	}
 
