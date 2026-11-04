@@ -35,6 +35,18 @@ func(e *Env) createTables(){
 		panic(err)
 	}
 
+	// User IDs are used by authentication and account lookups.
+	var userIDIndexExists int
+	err = e.db.QueryRow("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'user_Tracker_Link' AND index_name = 'idx_user_tracker_id'").Scan(&userIDIndexExists)
+	if err != nil {
+		panic(err)
+	}
+	if userIDIndexExists == 0 {
+		if _, err = e.db.Exec("CREATE INDEX idx_user_tracker_id ON user_Tracker_Link (id)"); err != nil {
+			panic(err)
+		}
+	}
+
 	createTableLink := `CREATE TABLE IF NOT EXISTS link_Tracker_Link (
 		id INT AUTO_INCREMENT PRIMARY KEY,
 		user_id VARCHAR(250),
@@ -59,6 +71,18 @@ func(e *Env) createTables(){
 	}
 	if indexExists == 0 {
 		if _, err = e.db.Exec("CREATE INDEX idx_link_user_clicks ON link_Tracker_Link (user_id, click_total, id)"); err != nil {
+			panic(err)
+		}
+	}
+
+	// Redirects and link updates frequently resolve a row by its slug.
+	var slugIndexExists int
+	err = e.db.QueryRow("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'link_Tracker_Link' AND index_name = 'idx_link_slug'").Scan(&slugIndexExists)
+	if err != nil {
+		panic(err)
+	}
+	if slugIndexExists == 0 {
+		if _, err = e.db.Exec("CREATE INDEX idx_link_slug ON link_Tracker_Link (slug)"); err != nil {
 			panic(err)
 		}
 	}
