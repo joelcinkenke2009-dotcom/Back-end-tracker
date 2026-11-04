@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/csv"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -143,42 +145,73 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var clicks, mobile, desktop, conversions, suspicious int64
-	_ = e.db.QueryRowContext(r.Context(), "SELECT COALESCE(SUM(click_total),0), COALESCE(SUM(click_mobile),0), COALESCE(SUM(click_pc),0) FROM link_Tracker_Link WHERE user_id=?", user).Scan(&clicks, &mobile, &desktop)
-	_ = e.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM tracker_events WHERE user_id=? AND event_type='conversion' AND created_at >= NOW() - INTERVAL 30 DAY", user).Scan(&conversions)
-	_ = e.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM tracker_events WHERE user_id=? AND (is_bot=1 OR is_duplicate=1) AND created_at >= NOW() - INTERVAL 30 DAY", user).Scan(&suspicious)
+	// These four reads are independent. Running them concurrently removes the
+	// serial database wait from the analytics summary without changing its JSON.
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
 
-	rows, err := e.db.QueryContext(r.Context(), `SELECT DATE(created_at),
-		SUM(CASE WHEN event_type='click' THEN 1 ELSE 0 END),
-		SUM(CASE WHEN event_type='conversion' THEN 1 ELSE 0 END)
-		FROM tracker_events WHERE user_id=? AND is_bot=0 AND is_duplicate=0
-		AND created_at >= NOW() - INTERVAL 14 DAY
-		GROUP BY DATE(created_at) ORDER BY DATE(created_at)`, user)
-	if err != nil {
-		log.Printf("analytics summary query failed: user_id=%q: %v", user, err)
-		http.Error(w, `{"error":"analytics_unavailable"}`, http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
 	type dailyPoint struct {
 		Date        string `json:"date"`
 		Clicks      int64  `json:"clicks"`
 		Conversions int64  `json:"conversions"`
 	}
-	daily := make([]dailyPoint, 0)
-	for rows.Next() {
-		var point dailyPoint
-		if err := rows.Scan(&point.Date, &point.Clicks, &point.Conversions); err != nil {
-			log.Printf("analytics summary scan failed: user_id=%q: %v", user, err)
+	var (
+		clicks, mobile, desktop, conversions, suspicious int64
+		daily = make([]dailyPoint, 0)
+		errs [4]error
+		wg sync.WaitGroup
+	)
+	wg.Add(4)
+
+	go func() {
+		defer wg.Done()
+		errs[0] = e.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(click_total),0),
+			COALESCE(SUM(click_mobile),0), COALESCE(SUM(click_pc),0)
+			FROM link_Tracker_Link WHERE user_id=?`, user).Scan(&clicks, &mobile, &desktop)
+	}()
+	go func() {
+		defer wg.Done()
+		errs[1] = e.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tracker_events
+			WHERE user_id=? AND event_type='conversion'
+			AND created_at >= NOW() - INTERVAL 30 DAY`, user).Scan(&conversions)
+	}()
+	go func() {
+		defer wg.Done()
+		errs[2] = e.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tracker_events
+			WHERE user_id=? AND (is_bot=1 OR is_duplicate=1)
+			AND created_at >= NOW() - INTERVAL 30 DAY`, user).Scan(&suspicious)
+	}()
+	go func() {
+		defer wg.Done()
+		rows, err := e.db.QueryContext(ctx, `SELECT DATE(created_at),
+			SUM(CASE WHEN event_type='click' THEN 1 ELSE 0 END),
+			SUM(CASE WHEN event_type='conversion' THEN 1 ELSE 0 END)
+			FROM tracker_events WHERE user_id=? AND is_bot=0 AND is_duplicate=0
+			AND created_at >= NOW() - INTERVAL 14 DAY
+			GROUP BY DATE(created_at) ORDER BY DATE(created_at)`, user)
+		if err != nil {
+			errs[3] = err
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var point dailyPoint
+			if err := rows.Scan(&point.Date, &point.Clicks, &point.Conversions); err != nil {
+				errs[3] = err
+				return
+			}
+			daily = append(daily, point)
+		}
+		errs[3] = rows.Err()
+	}()
+
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			log.Printf("analytics summary query failed: user_id=%q: %v", user, err)
 			http.Error(w, `{"error":"analytics_unavailable"}`, http.StatusInternalServerError)
 			return
 		}
-		daily = append(daily, point)
-	}
-	if err := rows.Err(); err != nil {
-		log.Printf("analytics summary iteration failed: user_id=%q: %v", user, err)
-		http.Error(w, `{"error":"analytics_unavailable"}`, http.StatusInternalServerError)
-		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"clicks": clicks, "mobile": mobile, "desktop": desktop,
@@ -196,7 +229,7 @@ func (e *Env) analyticsLive(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := e.db.QueryContext(r.Context(), `SELECT COALESCE(slug,''), COALESCE(event_type,''), COALESCE(event_name,''), created_at, COALESCE(is_bot,0), COALESCE(is_duplicate,0), COALESCE(utm_source,''), COALESCE(referrer,'')
 		FROM tracker_events WHERE user_id=? AND created_at >= NOW() - INTERVAL 24 HOUR
-		ORDER BY id DESC LIMIT 50`, user)
+		ORDER BY created_at DESC, id DESC LIMIT 50`, user)
 	if err != nil {
 		log.Printf("analytics live query failed: user_id=%q: %v", user, err)
 		http.Error(w, `{"error":"live_unavailable"}`, http.StatusInternalServerError)
@@ -370,7 +403,7 @@ func (e *Env) analyticsConversions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := e.db.QueryContext(r.Context(), `SELECT slug,event_name,event_value,currency,created_at FROM tracker_events
-		WHERE user_id=? AND event_type='conversion' ORDER BY id DESC LIMIT 100`, user)
+		WHERE user_id=? AND event_type='conversion' ORDER BY created_at DESC, id DESC LIMIT 100`, user)
 	if err != nil {
 		log.Printf("analytics conversions query failed: user_id=%q: %v", user, err)
 		http.Error(w, `{"error":"conversion_unavailable"}`, http.StatusInternalServerError)
