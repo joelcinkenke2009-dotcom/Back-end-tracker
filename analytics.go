@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -154,6 +155,7 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 		AND created_at >= NOW() - INTERVAL 14 DAY
 		GROUP BY DATE(created_at) ORDER BY DATE(created_at)`, user)
 	if err != nil {
+		log.Printf("analytics summary query failed: user_id=%q: %v", user, err)
 		http.Error(w, `{"error":"analytics_unavailable"}`, http.StatusInternalServerError)
 		return
 	}
@@ -167,10 +169,16 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var point dailyPoint
 		if err := rows.Scan(&point.Date, &point.Clicks, &point.Conversions); err != nil {
+			log.Printf("analytics summary scan failed: user_id=%q: %v", user, err)
 			http.Error(w, `{"error":"analytics_unavailable"}`, http.StatusInternalServerError)
 			return
 		}
 		daily = append(daily, point)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("analytics summary iteration failed: user_id=%q: %v", user, err)
+		http.Error(w, `{"error":"analytics_unavailable"}`, http.StatusInternalServerError)
+		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"clicks": clicks, "mobile": mobile, "desktop": desktop,
@@ -190,6 +198,7 @@ func (e *Env) analyticsLive(w http.ResponseWriter, r *http.Request) {
 		FROM tracker_events WHERE user_id=? AND created_at >= NOW() - INTERVAL 24 HOUR
 		ORDER BY id DESC LIMIT 50`, user)
 	if err != nil {
+		log.Printf("analytics live query failed: user_id=%q: %v", user, err)
 		http.Error(w, `{"error":"live_unavailable"}`, http.StatusInternalServerError)
 		return
 	}
@@ -208,10 +217,16 @@ func (e *Env) analyticsLive(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var event liveEvent
 		if err := rows.Scan(&event.Slug, &event.Type, &event.Name, &event.At, &event.Bot, &event.Duplicate, &event.UTMSource, &event.Referrer); err != nil {
+			log.Printf("analytics live scan failed: user_id=%q: %v", user, err)
 			http.Error(w, `{"error":"live_unavailable"}`, http.StatusInternalServerError)
 			return
 		}
 		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("analytics live iteration failed: user_id=%q: %v", user, err)
+		http.Error(w, `{"error":"live_unavailable"}`, http.StatusInternalServerError)
+		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"events": events, "updated_at": time.Now().UTC()})
 }
@@ -231,6 +246,7 @@ func (e *Env) analyticsFraud(w http.ResponseWriter, r *http.Request) {
 		AND created_at >= NOW() - INTERVAL 30 DAY
 		GROUP BY slug ORDER BY COUNT(*) DESC LIMIT 20`, user)
 	if err != nil {
+		log.Printf("analytics fraud query failed: user_id=%q: %v", user, err)
 		http.Error(w, `{"error":"fraud_unavailable"}`, http.StatusInternalServerError)
 		return
 	}
@@ -246,10 +262,16 @@ func (e *Env) analyticsFraud(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var item alert
 		if err := rows.Scan(&item.Slug, &item.Total, &item.Bots, &item.Repeated, &item.LastSeen); err != nil {
+			log.Printf("analytics fraud scan failed: user_id=%q: %v", user, err)
 			http.Error(w, `{"error":"fraud_unavailable"}`, http.StatusInternalServerError)
 			return
 		}
 		alerts = append(alerts, item)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("analytics fraud iteration failed: user_id=%q: %v", user, err)
+		http.Error(w, `{"error":"fraud_unavailable"}`, http.StatusInternalServerError)
+		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"alerts": alerts})
 }
@@ -298,6 +320,7 @@ func (e *Env) recordConversion(w http.ResponseWriter, r *http.Request) {
 		payload.Currency = payload.Currency[:8]
 	}
 	if err := e.insertTrackingEvent(r, userID, slug, "conversion", payload.EventName, payload.Value, payload.Currency, false, false); err != nil {
+		log.Printf("analytics public conversion insert failed: user_id=%q slug=%q: %v", userID, slug, err)
 		http.Error(w, `{"error":"conversion_unavailable"}`, http.StatusInternalServerError)
 		return
 	}
@@ -336,9 +359,9 @@ func (e *Env) analyticsConversions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		payload.Currency = strings.ToUpper(strings.TrimSpace(payload.Currency))
-		_, err := e.db.ExecContext(r.Context(), `INSERT INTO tracker_events (user_id,slug,event_type,event_name,event_value,currency,visitor_hash,ip_hash)
-			VALUES (?,?,'conversion',?,?,?,'manual','manual')`, user, payload.Slug, payload.EventName, payload.Value, payload.Currency)
-		if err != nil {
+		if len(payload.Currency) > 8 { payload.Currency = payload.Currency[:8] }
+		if err := e.insertTrackingEvent(r, user, payload.Slug, "conversion", payload.EventName, payload.Value, payload.Currency, false, false); err != nil {
+			log.Printf("analytics manual conversion insert failed: user_id=%q slug=%q: %v", user, payload.Slug, err)
 			http.Error(w, `{"error":"conversion_unavailable"}`, http.StatusInternalServerError)
 			return
 		}
@@ -349,6 +372,7 @@ func (e *Env) analyticsConversions(w http.ResponseWriter, r *http.Request) {
 	rows, err := e.db.QueryContext(r.Context(), `SELECT slug,event_name,event_value,currency,created_at FROM tracker_events
 		WHERE user_id=? AND event_type='conversion' ORDER BY id DESC LIMIT 100`, user)
 	if err != nil {
+		log.Printf("analytics conversions query failed: user_id=%q: %v", user, err)
 		http.Error(w, `{"error":"conversion_unavailable"}`, http.StatusInternalServerError)
 		return
 	}
@@ -364,10 +388,16 @@ func (e *Env) analyticsConversions(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var item conversion
 		if err := rows.Scan(&item.Slug,&item.Name,&item.Value,&item.Currency,&item.At); err != nil {
+			log.Printf("analytics conversions scan failed: user_id=%q: %v", user, err)
 			http.Error(w, `{"error":"conversion_unavailable"}`, http.StatusInternalServerError)
 			return
 		}
 		items=append(items,item)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("analytics conversions iteration failed: user_id=%q: %v", user, err)
+		http.Error(w, `{"error":"conversion_unavailable"}`, http.StatusInternalServerError)
+		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"conversions":items})
 }
@@ -381,6 +411,7 @@ func (e *Env) analyticsReport(w http.ResponseWriter, r *http.Request) {
 	rows, err := e.db.QueryContext(r.Context(), `SELECT slug,event_type,event_name,event_value,currency,utm_source,utm_medium,utm_campaign,created_at,is_bot,is_duplicate
 		FROM tracker_events WHERE user_id=? AND created_at >= NOW() - INTERVAL 30 DAY ORDER BY id DESC`, user)
 	if err != nil {
+		log.Printf("analytics report query failed: user_id=%q: %v", user, err)
 		http.Error(w, "Rapport indisponible", http.StatusInternalServerError)
 		return
 	}
@@ -395,6 +426,7 @@ func (e *Env) analyticsReport(w http.ResponseWriter, r *http.Request) {
 		var at time.Time
 		var bot,duplicate bool
 		if err := rows.Scan(&slug,&eventType,&eventName,&value,&currency,&source,&medium,&campaign,&at,&bot,&duplicate); err != nil {
+			log.Printf("analytics report scan failed: user_id=%q: %v", user, err)
 			http.Error(w, "Rapport indisponible", http.StatusInternalServerError)
 			return
 		}
