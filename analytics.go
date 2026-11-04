@@ -100,12 +100,21 @@ func (e *Env) redirectWithAnalytics(w http.ResponseWriter, r *http.Request) {
 	if !bot {
 		duplicate = isDuplicateClick(slug, r)
 	}
-	if err := e.insertTrackingEvent(r, userID, slug, "click", "", 0, "", bot, duplicate); err != nil {
-		// Tracking failures must never prevent a visitor from reaching the destination.
-		fmt.Println("analytics event insert failed:", err)
+	clickAllowed := false
+	if !bot && !duplicate {
+		clickAllowed, err = e.consumeClickQuota(userID)
+		if err != nil {
+			fmt.Println("subscription click quota check failed:", err)
+		}
+	}
+	if bot || duplicate || clickAllowed {
+		if err := e.insertTrackingEvent(r, userID, slug, "click", "", 0, "", bot, duplicate); err != nil {
+			// Tracking failures must never prevent a visitor from reaching the destination.
+			fmt.Println("analytics event insert failed:", err)
+		}
 	}
 
-	if !bot && !duplicate {
+	if clickAllowed {
 		query := "UPDATE link_Tracker_Link SET click_total=click_total+1"
 		if isMobileRequest(r) {
 			query += ", click_mobile=click_mobile+1"
