@@ -194,7 +194,7 @@ func (e *Env) analyticsLive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	rows, err := e.db.QueryContext(r.Context(), `SELECT slug, event_type, event_name, created_at, is_bot, is_duplicate, utm_source, referrer
+	rows, err := e.db.QueryContext(r.Context(), `SELECT COALESCE(slug,''), COALESCE(event_type,''), COALESCE(event_name,''), created_at, COALESCE(is_bot,0), COALESCE(is_duplicate,0), COALESCE(utm_source,''), COALESCE(referrer,'')
 		FROM tracker_events WHERE user_id=? AND created_at >= NOW() - INTERVAL 24 HOUR
 		ORDER BY id DESC LIMIT 50`, user)
 	if err != nil {
