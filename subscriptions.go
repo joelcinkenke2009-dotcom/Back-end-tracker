@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"time"
@@ -45,6 +46,17 @@ func (e *Env) ensureSubscriptionTables() error {
 	}
 	_, err = e.db.Exec(`INSERT IGNORE INTO user_subscriptions (user_id)
 		SELECT id FROM user_Tracker_Link WHERE id IS NOT NULL AND id <> ''`)
+	if err != nil {
+		return err
+	}
+	_, err = e.db.Exec(`CREATE TABLE IF NOT EXISTS pending_subscription_payments (
+		cart_id VARCHAR(255) NOT NULL PRIMARY KEY,
+		user_id VARCHAR(255) NOT NULL,
+		plan VARCHAR(24) NOT NULL,
+		expires_at DATETIME NOT NULL,
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		INDEX idx_pending_subscription_user (user_id)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
 	return err
 }
 
