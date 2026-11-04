@@ -6,9 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -140,7 +138,8 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 	_ = e.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM tracker_events WHERE user_id=? AND event_type='conversion' AND created_at >= NOW() - INTERVAL 30 DAY", user).Scan(&conversions)
 	_ = e.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM tracker_events WHERE user_id=? AND (is_bot=1 OR is_duplicate=1) AND created_at >= NOW() - INTERVAL 30 DAY", user).Scan(&suspicious)
 
-	rows, err := e.db.QueryContext(r.Context(), `SELECT DATE(created_at), COUNT(*),
+	rows, err := e.db.QueryContext(r.Context(), `SELECT DATE(created_at),
+		SUM(CASE WHEN event_type='click' THEN 1 ELSE 0 END),
 		SUM(CASE WHEN event_type='conversion' THEN 1 ELSE 0 END)
 		FROM tracker_events WHERE user_id=? AND is_bot=0 AND is_duplicate=0
 		AND created_at >= NOW() - INTERVAL 14 DAY
@@ -388,11 +387,3 @@ func (e *Env) analyticsReport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Avoid treating arbitrary referrer values as navigable links in analytics responses.
-func safeReferrer(raw string) string {
-	parsed, err := url.Parse(raw)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || net.ParseIP(parsed.Hostname()) != nil {
-		return ""
-	}
-	return parsed.Host
-}
