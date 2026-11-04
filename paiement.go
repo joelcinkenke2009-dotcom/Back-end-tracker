@@ -96,6 +96,160 @@ func(e *Env) paiement(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, result.RedirectUrl, http.StatusFound)
 }
 
+
+func(e *Env) paiement2(w http.ResponseWriter, r *http.Request) {
+	cookie := cookieRecuperation(w, r, "user_id")
+	if cookie == "nil" {
+		http.Redirect(w, r,os.Getenv("FRONT") + "/inscription", http.StatusFound)
+		return
+	}
+	
+	var (
+		name string
+		firstName string
+		email string
+	)
+
+	err := e.db.QueryRow(`SELECT name,first_name,email FROM user_Tracker_Link WHERE id=?`, cookie).Scan(&name,&firstName,&email)
+	if err != nil {
+		fmt.Println("Erreur récupération utilisateur :", err)
+		return
+	}
+
+	data := map[string]any{
+		"productDocumentId": "87b79ab6-ad20-4d6d-b219-6d8ab831ef6e",
+		"email":             email,
+		"firstName":         firstName,
+		"lastName":          name,
+		"redirectUrl":       os.Getenv("MY_URL") + "/paiement/verifyPaiement2",
+		"meta": map[string]any{
+			"userId": cookie,
+		},
+	}
+
+	jsonData, _ := json.Marshal(data)
+
+	req, err := http.NewRequest("POST", os.Getenv("API_URL") + "/checkout", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	Authorization := fmt.Sprintf("Bearer %s", os.Getenv("API_KEY"))
+	req.Header.Set("Content-type", "application/json")
+	req.Header.Set("Authorization", Authorization)
+
+	clent := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := clent.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var result StructPaiement
+
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		log.Fatal("Erreur de decodage JSON: ", err)
+	}
+
+	idCookie := &http.Cookie{
+		Name: "panier_id",
+		Value: result.Cart.Id,
+		Path: "/paiement",
+		HttpOnly: true,
+		Secure: true,
+		SameSite: http.SameSiteNoneMode,
+		MaxAge:   1200,
+	}
+	http.SetCookie(w, idCookie)
+	http.Redirect(w, r, result.RedirectUrl, http.StatusFound)
+}
+
+
+func(e *Env) paiement3(w http.ResponseWriter, r *http.Request) {
+	cookie := cookieRecuperation(w, r, "user_id")
+	if cookie == "nil" {
+		http.Redirect(w, r,os.Getenv("FRONT") + "/inscription", http.StatusFound)
+		return
+	}
+	
+	var (
+		name string
+		firstName string
+		email string
+	)
+
+	err := e.db.QueryRow(`SELECT name,first_name,email FROM user_Tracker_Link WHERE id=?`, cookie).Scan(&name,&firstName,&email)
+	if err != nil {
+		fmt.Println("Erreur récupération utilisateur :", err)
+		return
+	}
+
+	data := map[string]any{
+		"productDocumentId": "c8dec53d-aac0-4d40-bd94-0574dcf99cbf",
+		"email":             email,
+		"firstName":         firstName,
+		"lastName":          name,
+		"redirectUrl":       os.Getenv("MY_URL") + "/paiement/verifyPaiement3",
+		"meta": map[string]any{
+			"userId": cookie,
+		},
+	}
+
+	jsonData, _ := json.Marshal(data)
+
+	req, err := http.NewRequest("POST", os.Getenv("API_URL") + "/checkout", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	Authorization := fmt.Sprintf("Bearer %s", os.Getenv("API_KEY"))
+	req.Header.Set("Content-type", "application/json")
+	req.Header.Set("Authorization", Authorization)
+
+	clent := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := clent.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var result StructPaiement
+
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		log.Fatal("Erreur de decodage JSON: ", err)
+	}
+
+	idCookie := &http.Cookie{
+		Name: "panier_id",
+		Value: result.Cart.Id,
+		Path: "/paiement",
+		HttpOnly: true,
+		Secure: true,
+		SameSite: http.SameSiteNoneMode,
+		MaxAge:   1200,
+	}
+	http.SetCookie(w, idCookie)
+	http.Redirect(w, r, result.RedirectUrl, http.StatusFound)
+}
+
 type Meta struct{
 	UserId string `json:"userId"`
 }
