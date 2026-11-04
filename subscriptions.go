@@ -12,16 +12,17 @@ import (
 )
 
 type subscriptionPlanConfig struct {
+	Status         int
 	LinksLimit     int64
 	ClicksLimit    int64
 	Analytics      bool
 }
 
 var subscriptionPlans = map[string]subscriptionPlanConfig{
-	"free":      {LinksLimit: 1, ClicksLimit: 30, Analytics: false},
-	"standard":  {LinksLimit: 5, ClicksLimit: 350, Analytics: false},
-	"advanced":  {LinksLimit: 20, ClicksLimit: 1250, Analytics: true},
-	"unlimited": {LinksLimit: -1, ClicksLimit: -1, Analytics: true},
+	"free":      {Status: 1, LinksLimit: 1, ClicksLimit: 30, Analytics: false},
+	"standard":  {Status: 2, LinksLimit: 5, ClicksLimit: 350, Analytics: false},
+	"advanced":  {Status: 3, LinksLimit: 20, ClicksLimit: 1250, Analytics: true},
+	"unlimited": {Status: 4, LinksLimit: -1, ClicksLimit: -1, Analytics: true},
 }
 
 // ensureSubscriptionTables installs the subscription table and gives every
@@ -44,6 +45,17 @@ func (e *Env) ensureSubscriptionTables() error {
 	if err != nil {
 		return err
 	}
+	// Numeric subscription tier stored on the registration/account table.
+	var statusColumnExists int
+	if err := e.db.QueryRow(`SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema=DATABASE() AND table_name='user_Tracker_Link' AND column_name='status'`).Scan(&statusColumnExists); err != nil {
+		return err
+	}
+	if statusColumnExists == 0 {
+		if _, err := e.db.Exec("ALTER TABLE user_Tracker_Link ADD COLUMN status TINYINT NOT NULL DEFAULT 1"); err != nil {
+			return err
+		}
+	}
 	_, err = e.db.Exec(`INSERT IGNORE INTO user_subscriptions (user_id)
 		SELECT id FROM user_Tracker_Link WHERE id IS NOT NULL AND id <> ''`)
 	if err != nil {
@@ -57,6 +69,14 @@ func (e *Env) ensureSubscriptionTables() error {
 		    s.clicks_used=0, s.analytics_enabled=TRUE, s.period_started_at=NOW(),
 		    s.expires_at=u.is_active_date
 		WHERE s.plan='free' AND u.is_active_date > NOW()`)
+	if err != nil {
+		return err
+	}
+	// Keep the numeric account status synchronized for free and legacy paid users.
+	_, err = e.db.Exec(`UPDATE user_Tracker_Link u
+		LEFT JOIN user_subscriptions s ON s.user_id=u.id
+		SET u.status=CASE WHEN s.plan='standard' THEN 2 WHEN s.plan='advanced' THEN 3
+			WHEN s.plan='unlimited' THEN 4 ELSE 1 END`)
 	if err != nil {
 		return err
 	}
@@ -84,6 +104,12 @@ func (e *Env) ensureUserSubscription(userID string) error {
 		SET plan='free', status='active', links_limit=1, clicks_limit=30,
 		    clicks_used=0, analytics_enabled=FALSE, period_started_at=NOW(), expires_at=NULL
 		WHERE user_id=? AND plan <> 'free' AND expires_at IS NOT NULL AND expires_at <= NOW()`, userID)
+	if err != nil {
+		return err
+	}
+	_, err = e.db.Exec(`UPDATE user_Tracker_Link u
+		JOIN user_subscriptions s ON s.user_id=u.id
+		SET u.status=1 WHERE u.id=? AND s.plan='free'`, userID)
 	return err
 }
 
@@ -113,17 +139,18 @@ func (e *Env) subscriptionStatus(w http.ResponseWriter, r *http.Request) {
 	var analytics bool
 	var expires sql.NullTime
 	var linksUsed int64
+	var planStatus int
 	err := e.db.QueryRowContext(r.Context(), `SELECT s.plan, s.status, s.links_limit,
 		s.clicks_limit, s.clicks_used, s.analytics_enabled, s.expires_at,
-		(SELECT COUNT(*) FROM link_Tracker_Link l WHERE l.user_id=s.user_id)
-		FROM user_subscriptions s WHERE s.user_id=?`, userID).Scan(
-		&plan, &status, &linksLimit, &clicksLimit, &clicksUsed, &analytics, &expires, &linksUsed)
+		(SELECT COUNT(*) FROM link_Tracker_Link l WHERE l.user_id=s.user_id), COALESCE(u.status,1)
+		FROM user_subscriptions s JOIN user_Tracker_Link u ON u.id=s.user_id WHERE s.user_id=?`, userID).Scan(
+		&plan, &status, &linksLimit, &clicksLimit, &clicksUsed, &analytics, &expires, &linksUsed, &planStatus)
 	if err != nil {
 		http.Error(w, `{"error":"subscription_unavailable"}`, http.StatusInternalServerError)
 		return
 	}
 	payload := map[string]any{
-		"plan": plan, "status": status, "links_limit": linksLimit,
+		"plan": plan, "status": status, "plan_status": planStatus, "links_limit": linksLimit,
 		"links_used": linksUsed, "clicks_limit": clicksLimit,
 		"clicks_used": clicksUsed, "analytics_enabled": analytics,
 		"links_remaining": remaining(linksLimit, linksUsed),
@@ -297,7 +324,13 @@ func (e *Env) verifySubscriptionPayment(plan string) http.HandlerFunc {
 			return
 		}
 
-		_, err = e.db.ExecContext(r.Context(), `INSERT INTO user_subscriptions
+		tx, err := e.db.BeginTx(r.Context(), nil)
+		if err != nil {
+			http.Error(w, "Subscription activation failed", http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback()
+		_, err = tx.ExecContext(r.Context(), `INSERT INTO user_subscriptions
 			(user_id, plan, status, links_limit, clicks_limit, clicks_used, analytics_enabled, period_started_at, expires_at)
 			VALUES (?, ?, 'active', ?, ?, 0, ?, NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY))
 			ON DUPLICATE KEY UPDATE plan=VALUES(plan), status='active',
@@ -305,12 +338,19 @@ func (e *Env) verifySubscriptionPayment(plan string) http.HandlerFunc {
 			clicks_used=0, analytics_enabled=VALUES(analytics_enabled),
 			period_started_at=NOW(), expires_at=VALUES(expires_at)`,
 			pendingUser, plan, config.LinksLimit, config.ClicksLimit, config.Analytics)
+		if err == nil {
+			_, err = tx.ExecContext(r.Context(), "UPDATE user_Tracker_Link SET status=?, is_active_date=DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE id=?", config.Status, pendingUser)
+		}
+		if err == nil {
+			_, err = tx.ExecContext(r.Context(), "DELETE FROM pending_subscription_payments WHERE cart_id=?", panier)
+		}
+		if err == nil {
+			err = tx.Commit()
+		}
 		if err != nil {
 			http.Error(w, "Subscription activation failed", http.StatusInternalServerError)
 			return
 		}
-		_, _ = e.db.ExecContext(r.Context(), "UPDATE user_Tracker_Link SET is_active_date=DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE id=?", pendingUser)
-		_, _ = e.db.ExecContext(r.Context(), "DELETE FROM pending_subscription_payments WHERE cart_id=?", panier)
 		http.SetCookie(w, &http.Cookie{Name: "panier_id", Value: "", Path: "/paiement", HttpOnly: true, Secure: true, SameSite: http.SameSiteNoneMode, MaxAge: -1})
 		http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?payment=success", http.StatusFound)
 	}
