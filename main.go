@@ -134,6 +134,9 @@ func main() {
 	app := &Env{db: sqlDB}
 
 	app.createTables()
+	if err := app.ensureAnalyticsTables(); err != nil {
+		log.Panic("Erreur création des tables analytics :", err)
+	}
 
 	r.Post("/users/inscription", app.inscription)
 	r.Post("/users/connexion", app.connexion)
@@ -153,8 +156,15 @@ func main() {
 		r.Post("/createLink", app.createLink)
 		r.Post("/modify", app.modifyLink)
 		r.Post("/verifyLink", verifyLink)
+		r.Get("/analytics/summary", app.analyticsSummary)
+		r.Get("/analytics/live", app.analyticsLive)
+		r.Get("/analytics/fraud", app.analyticsFraud)
+		r.Get("/analytics/conversions", app.analyticsConversions)
+		r.Post("/analytics/conversions", app.analyticsConversions)
+		r.Get("/analytics/report", app.analyticsReport)
 	})
-	r.Get("/link/{slug}",app.redirectLink)
+	r.Get("/link/{slug}", app.redirectWithAnalytics)
+	r.Handle("/track/conversion/{slug}", http.HandlerFunc(app.recordConversion))
 
 	server := &http.Server{
 		Addr:              ":" + os.Getenv("PORT"),
