@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -110,6 +111,8 @@ func main() {
 	// 	}	
 	// }
 	r := chi.NewRouter()
+	// Compress JSON responses to reduce dashboard transfer size on slower networks.
+	r.Use(middleware.Compress(5, "application/json"))
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&tls=skip-verify",os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_DATABASE"))
 	sqlDB, err := sql.Open("mysql", dsn)
