@@ -57,3 +57,13 @@ CREATE TABLE IF NOT EXISTS pending_subscription_payments (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_pending_subscription_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Synchronize account status from the authoritative subscription plan.
+UPDATE user_Tracker_Link u
+LEFT JOIN user_subscriptions s ON s.user_id = u.id
+SET u.status = CASE
+    WHEN s.plan = 'standard' THEN 2
+    WHEN s.plan = 'advanced' THEN 3
+    WHEN s.plan = 'unlimited' THEN 4
+    ELSE 1
+END;
