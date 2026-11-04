@@ -28,6 +28,7 @@ func(e *Env) createTables(){
 		password VARCHAR(255),
 		email VARCHAR(250) UNIQUE NOT NULL ,
 		is_active_date TIMESTAMP,
+		status TINYINT NOT NULL DEFAULT 1,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (email)
 	);`

@@ -1,5 +1,22 @@
 -- AdPulse subscription tiers and usage quotas.
 -- The application also runs an idempotent version of this migration at startup.
+-- Account tier column: 1=free, 2=$9, 3=$19, 4=$59.
+-- Idempotent migration for existing registration tables.
+SET @status_column_exists = (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'user_Tracker_Link'
+      AND column_name = 'status'
+);
+SET @status_column_sql = IF(
+    @status_column_exists = 0,
+    'ALTER TABLE user_Tracker_Link ADD COLUMN status TINYINT NOT NULL DEFAULT 1',
+    'SELECT 1'
+);
+PREPARE status_column_stmt FROM @status_column_sql;
+EXECUTE status_column_stmt;
+DEALLOCATE PREPARE status_column_stmt;
+
 CREATE TABLE IF NOT EXISTS user_subscriptions (
     user_id VARCHAR(255) NOT NULL PRIMARY KEY,
     plan VARCHAR(24) NOT NULL DEFAULT 'free',
@@ -40,3 +57,13 @@ CREATE TABLE IF NOT EXISTS pending_subscription_payments (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_pending_subscription_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Synchronize account status from the authoritative subscription plan.
+UPDATE user_Tracker_Link u
+LEFT JOIN user_subscriptions s ON s.user_id = u.id
+SET u.status = CASE
+    WHEN s.plan = 'standard' THEN 2
+    WHEN s.plan = 'advanced' THEN 3
+    WHEN s.plan = 'unlimited' THEN 4
+    ELSE 1
+END;
