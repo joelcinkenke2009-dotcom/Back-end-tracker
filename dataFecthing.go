@@ -50,6 +50,7 @@ func parsePagination(r *http.Request) (limit, offset int) {
 func (e *Env) dataOnly(w http.ResponseWriter, r *http.Request) {
 	setJSONHeaders(w)
 	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Has-More, X-Limit, X-Offset, Link")
 
 	// AuthMiddleware has already validated the session and placed the user ID
 	// in the request context. Avoid parsing the cookie a second time.
@@ -103,7 +104,7 @@ func (e *Env) dataOnly(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Keep the existing JSON array response so current Vue components remain
-	// compatible. Pagination is opt-in from the frontend via limit/offset.
+	// compatible. The frontend can request subsequent pages with limit/offset.
 	if err := json.NewEncoder(w).Encode(links); err != nil {
 		fmt.Println("Erreur envoi des liens :", err)
 	}
