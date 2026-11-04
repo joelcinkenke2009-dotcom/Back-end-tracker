@@ -67,6 +67,13 @@ func (e *Env) ensureUserSubscription(userID string) error {
 func (e *Env) subscriptionStatus(w http.ResponseWriter, r *http.Request) {
 	setJSONHeaders(w)
 	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Allow-Origin", os.Getenv("FRONT"))
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	userID := cookieRecuperation(w, r, "user_id")
 	if userID == "nil" {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
