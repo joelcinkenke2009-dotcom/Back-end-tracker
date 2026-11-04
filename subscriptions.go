@@ -281,7 +281,7 @@ func (e *Env) verifySubscriptionPayment(plan string) http.HandlerFunc {
 			http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?payment=error", http.StatusFound)
 			return
 		}
-		if payment.Statut != "completed" || payment.Meta.UserId == "" {
+		if payment.Statut != "completed" || payment.Meta.UserId == "" || payment.Meta.UserId != pendingUser {
 			http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?payment=failed", http.StatusFound)
 			return
 		}
@@ -293,12 +293,13 @@ func (e *Env) verifySubscriptionPayment(plan string) http.HandlerFunc {
 			links_limit=VALUES(links_limit), clicks_limit=VALUES(clicks_limit),
 			clicks_used=0, analytics_enabled=VALUES(analytics_enabled),
 			period_started_at=NOW(), expires_at=VALUES(expires_at)`,
-			payment.Meta.UserId, plan, config.LinksLimit, config.ClicksLimit, config.Analytics)
+			pendingUser, plan, config.LinksLimit, config.ClicksLimit, config.Analytics)
 		if err != nil {
 			http.Error(w, "Subscription activation failed", http.StatusInternalServerError)
 			return
 		}
-		_, _ = e.db.ExecContext(r.Context(), "UPDATE user_Tracker_Link SET is_active_date=DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE id=?", payment.Meta.UserId)
+		_, _ = e.db.ExecContext(r.Context(), "UPDATE user_Tracker_Link SET is_active_date=DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE id=?", pendingUser)
+		_, _ = e.db.ExecContext(r.Context(), "DELETE FROM pending_subscription_payments WHERE cart_id=?", panier)
 		http.SetCookie(w, &http.Cookie{Name: "panier_id", Value: "", Path: "/paiement", HttpOnly: true, Secure: true, SameSite: http.SameSiteNoneMode, MaxAge: -1})
 		http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?payment=success", http.StatusFound)
 	}
