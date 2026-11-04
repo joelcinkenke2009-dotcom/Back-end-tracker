@@ -19,6 +19,16 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
 INSERT IGNORE INTO user_subscriptions (user_id)
 SELECT id FROM user_Tracker_Link WHERE id IS NOT NULL AND id <> '';
 
+-- Preserve legacy paid users whose old is_active_date is still in the future.
+-- The old database did not store which paid tier they purchased, so grant full access
+-- only until their already-paid expiry; new checkouts use the exact tier mapping.
+UPDATE user_subscriptions s
+JOIN user_Tracker_Link u ON u.id = s.user_id
+SET s.plan = 'unlimited', s.status = 'active', s.links_limit = -1,
+    s.clicks_limit = -1, s.clicks_used = 0, s.analytics_enabled = TRUE,
+    s.period_started_at = NOW(), s.expires_at = u.is_active_date
+WHERE s.plan = 'free' AND u.is_active_date > NOW();
+
 -- Paid plans are activated only after the payment provider confirms status=completed.
 -- Each paid subscription lasts 30 days; expiration downgrades the account to free.
 
