@@ -177,7 +177,7 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := rows.Err(); err != nil {
 		log.Printf("analytics summary iteration failed: user_id=%q: %v", user, err)
-		http.Error(w, `{"error":"analytics_unavailable}`, http.StatusInternalServerError)
+		http.Error(w, `{"error":"analytics_unavailable"}`, http.StatusInternalServerError)
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -225,7 +225,7 @@ func (e *Env) analyticsLive(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := rows.Err(); err != nil {
 		log.Printf("analytics live iteration failed: user_id=%q: %v", user, err)
-		http.Error(w, `{"error":"live_unavailable}`, http.StatusInternalServerError)
+		http.Error(w, `{"error":"live_unavailable"}`, http.StatusInternalServerError)
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"events": events, "updated_at": time.Now().UTC()})
@@ -270,7 +270,7 @@ func (e *Env) analyticsFraud(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := rows.Err(); err != nil {
 		log.Printf("analytics fraud iteration failed: user_id=%q: %v", user, err)
-		http.Error(w, `{"error":"fraud_unavailable}`, http.StatusInternalServerError)
+		http.Error(w, `{"error":"fraud_unavailable"}`, http.StatusInternalServerError)
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"alerts": alerts})
@@ -359,6 +359,7 @@ func (e *Env) analyticsConversions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		payload.Currency = strings.ToUpper(strings.TrimSpace(payload.Currency))
+		if len(payload.Currency) > 8 { payload.Currency = payload.Currency[:8] }
 		if err := e.insertTrackingEvent(r, user, payload.Slug, "conversion", payload.EventName, payload.Value, payload.Currency, false, false); err != nil {
 			log.Printf("analytics manual conversion insert failed: user_id=%q slug=%q: %v", user, payload.Slug, err)
 			http.Error(w, `{"error":"conversion_unavailable"}`, http.StatusInternalServerError)
@@ -395,7 +396,7 @@ func (e *Env) analyticsConversions(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := rows.Err(); err != nil {
 		log.Printf("analytics conversions iteration failed: user_id=%q: %v", user, err)
-		http.Error(w, `{"error":"conversion_unavailable}`, http.StatusInternalServerError)
+		http.Error(w, `{"error":"conversion_unavailable"}`, http.StatusInternalServerError)
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"conversions":items})
