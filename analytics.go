@@ -100,12 +100,21 @@ func (e *Env) redirectWithAnalytics(w http.ResponseWriter, r *http.Request) {
 	if !bot {
 		duplicate = isDuplicateClick(slug, r)
 	}
-	if err := e.insertTrackingEvent(r, userID, slug, "click", "", 0, "", bot, duplicate); err != nil {
-		// Tracking failures must never prevent a visitor from reaching the destination.
-		fmt.Println("analytics event insert failed:", err)
+	clickAllowed := false
+	if !bot && !duplicate {
+		clickAllowed, err = e.consumeClickQuota(userID)
+		if err != nil {
+			fmt.Println("subscription click quota check failed:", err)
+		}
+	}
+	if bot || duplicate || clickAllowed {
+		if err := e.insertTrackingEvent(r, userID, slug, "click", "", 0, "", bot, duplicate); err != nil {
+			// Tracking failures must never prevent a visitor from reaching the destination.
+			fmt.Println("analytics event insert failed:", err)
+		}
 	}
 
-	if !bot && !duplicate {
+	if clickAllowed {
 		query := "UPDATE link_Tracker_Link SET click_total=click_total+1"
 		if isMobileRequest(r) {
 			query += ", click_mobile=click_mobile+1"
@@ -258,6 +267,16 @@ func (e *Env) recordConversion(w http.ResponseWriter, r *http.Request) {
 	var userID string
 	if err := e.db.QueryRowContext(r.Context(), "SELECT user_id FROM link_Tracker_Link WHERE slug=?", slug).Scan(&userID); err != nil {
 		http.Error(w, `{"error":"unknown_link"}`, http.StatusNotFound)
+		return
+	}
+	if err := e.ensureUserSubscription(userID); err != nil {
+		http.Error(w, `{"error":"subscription_unavailable"}`, http.StatusInternalServerError)
+		return
+	}
+	var analyticsAllowed bool
+	if err := e.db.QueryRowContext(r.Context(), `SELECT analytics_enabled FROM user_subscriptions
+		WHERE user_id=? AND (expires_at IS NULL OR expires_at > NOW())`, userID).Scan(&analyticsAllowed); err != nil || !analyticsAllowed {
+		http.Error(w, `{"error":"analytics_plan_required"}`, http.StatusForbidden)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8*1024)
