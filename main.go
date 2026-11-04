@@ -161,7 +161,7 @@ func main() {
 		Handler:           r,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
