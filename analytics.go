@@ -269,6 +269,16 @@ func (e *Env) recordConversion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unknown_link"}`, http.StatusNotFound)
 		return
 	}
+	if err := e.ensureUserSubscription(userID); err != nil {
+		http.Error(w, `{"error":"subscription_unavailable"}`, http.StatusInternalServerError)
+		return
+	}
+	var analyticsAllowed bool
+	if err := e.db.QueryRowContext(r.Context(), `SELECT analytics_enabled FROM user_subscriptions
+		WHERE user_id=? AND (expires_at IS NULL OR expires_at > NOW())`, userID).Scan(&analyticsAllowed); err != nil || !analyticsAllowed {
+		http.Error(w, `{"error":"analytics_plan_required"}`, http.StatusForbidden)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8*1024)
 	var payload conversionPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
