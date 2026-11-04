@@ -38,16 +38,15 @@ func(e *Env) AuthMiddleware(next http.Handler) http.Handler {
 			})
 			return
 		}
+		// A single indexed existence lookup is enough here. Subscription rows are
+		// initialized at startup/registration; synchronizing them on every API
+		// request used to add several sequential MySQL round trips.
 		var exists int
-		if err := e.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM user_Tracker_Link WHERE id=?", userID).Scan(&exists); err != nil || exists == 0 {
+		if err := e.db.QueryRowContext(r.Context(), "SELECT 1 FROM user_Tracker_Link WHERE id=? LIMIT 1", userID).Scan(&exists); err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"login": "Veuillez vous inscrire ou vous connecter pour continuer",
 			})
-			return
-		}
-		if err := e.ensureUserSubscription(userID); err != nil {
-			http.Error(w, `{"error":"subscription_unavailable"}`, http.StatusInternalServerError)
 			return
 		}
 		ctx := context.WithValue(r.Context(), userInfosKey, userID)
