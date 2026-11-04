@@ -208,6 +208,37 @@ func (e *Env) analyticsAccessMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// checkoutForPlan binds the cart created by the existing checkout handler to the selected plan.
+// This prevents a user from paying for a cheaper product and opening another plan's callback.
+func (e *Env) checkoutForPlan(plan string, handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := cookieRecuperation(w, r, "user_id")
+		recorder := httptest.NewRecorder()
+		handler(recorder, r)
+		if recorder.Code >= http.StatusMultipleChoices && recorder.Code < http.StatusBadRequest {
+			for _, cookie := range recorder.Result().Cookies() {
+				if cookie.Name != "panier_id" || cookie.Value == "" || userID == "nil" {
+					continue
+				}
+				_, err := e.db.Exec(`INSERT INTO pending_subscription_payments (cart_id, user_id, plan, expires_at)
+					VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 2 HOUR))
+					ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), plan=VALUES(plan), expires_at=VALUES(expires_at)`,
+					cookie.Value, userID, plan)
+				if err != nil {
+					http.Error(w, "Impossible d'enregistrer la formule du paiement.", http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+		for key, values := range recorder.Header() {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+		w.WriteHeader(recorder.Code)
+		_, _ = w.Write(recorder.Body.Bytes())
+	}
+}
 func (e *Env) verifySubscriptionPayment(plan string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		panier := cookieRecuperation(w, r, "panier_id")
