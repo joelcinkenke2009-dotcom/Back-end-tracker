@@ -46,9 +46,21 @@ func(e *Env) createTables(){
 		click_pc INT DEFAULT 0,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`
-	_, err =  e.db.Exec(createTableLink)
+	_, err = e.db.Exec(createTableLink)
 	if err != nil {
 		panic(err)
+	}
+
+	// Index used by the dashboard query: WHERE user_id=? ORDER BY click_total.
+	var indexExists int
+	err = e.db.QueryRow("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'link_Tracker_Link' AND index_name = 'idx_link_user_clicks'").Scan(&indexExists)
+	if err != nil {
+		panic(err)
+	}
+	if indexExists == 0 {
+		if _, err = e.db.Exec("CREATE INDEX idx_link_user_clicks ON link_Tracker_Link (user_id, click_total, id)"); err != nil {
+			panic(err)
+		}
 	}
 
 	createTableMeta := `CREATE TABLE IF NOT EXISTS user_meta_ad_connect (
@@ -86,8 +98,9 @@ func main() {
 		return
 	}
 	sqlDB.SetMaxOpenConns(25)
-	sqlDB.SetConnMaxIdleTime(25)
-	sqlDB.SetConnMaxLifetime(5*time.Minute)
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetConnMaxIdleTime(30 * time.Second)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	
 	defer sqlDB.Close()
 
@@ -116,8 +129,16 @@ func main() {
 	})
 	r.Get("/link/{slug}",app.redirectLink)
 
-	if err := http.ListenAndServe(":"+ os.Getenv("PORT"), r); err != nil {
-		fmt.Println("Erreur lors du lancement: ",err)
+	server := &http.Server{
+		Addr:              ":" + os.Getenv("PORT"),
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		fmt.Println("Erreur lors du lancement: ", err)
 		return
 	}
 }
