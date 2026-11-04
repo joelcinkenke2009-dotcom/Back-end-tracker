@@ -11,12 +11,12 @@ import (
 )
 
 type UserInfos struct {
-	Link        string `db:"url" json:"url"`
-	Slug        string `db:"slug" json:"slug"`
-	UrlGenerate string `db:"urlGenerate" json:"urlGenerate"`
-	ClickTotal  int    `db:"click_total" json:"click_total"`
-	ClickPC     int    `db:"click_pc" json:"click_pc"`
-	ClickMobile int    `db:"click_mobile" json:"click_mobile"`
+	Link        string `db:"url"`
+	Slug        string `db:"slug"`
+	UrlGenerate string `db:"urlGenerate"`
+	ClickTotal  int    `db:"click_total"`
+	ClickPC     int    `db:"click_pc"`
+	ClickMobile int    `db:"click_mobile"`
 }
 
 func setJSONHeaders(w http.ResponseWriter) {
@@ -159,10 +159,10 @@ func (e *Env) isActive(w http.ResponseWriter, r *http.Request) {
 }
 
 type AdminData struct {
-	FullName string `db:"full_name" json:"full_name"`
-	Email    string `db:"email" json:"email"`
-	Id       string `db:"id" json:"id"`
-	IsActive string `db:"is_active_date" json:"is_active_date"`
+	FullName string `db:"full_name"`
+	Email    string `db:"email"`
+	Id       string `db:"id"`
+	IsActive string `db:"is_active_date"`
 }
 
 func AdminsMiddleware(next http.Handler) http.Handler {
