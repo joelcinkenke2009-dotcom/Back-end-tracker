@@ -210,13 +210,21 @@ func (e *Env) createLink(w http.ResponseWriter, r *http.Request) {
 
 	urlGenerate := fmt.Sprintf("%s/link/%s", os.Getenv("MY_URL"), slug)
 
-	_, err = e.db.Exec("INSERT INTO link_Tracker_Link (user_id,url,slug,urlGenerate) VALUES (?,?,?,?)", user, url, slug, urlGenerate)
-	if err != nil {
-		log.Printf("erreur lors de l'insertion %s de l'id=%s", err, user)
-		http.Redirect(w,r,os.Getenv("FRONT")+"/dashboard?status=500",http.StatusFound)
+	userID, ok := user.(string)
+	if !ok || userID == "" {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	
+	created, err := e.createLinkWithinPlan(userID, url, slug, urlGenerate)
+	if err != nil {
+		log.Printf("erreur lors de la création du lien pour l'utilisateur %s: %s", userID, err)
+		http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?status=500", http.StatusFound)
+		return
+	}
+	if !created {
+		http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard?limit=links", http.StatusFound)
+		return
+	}
 	http.Redirect(w, r, os.Getenv("FRONT")+"/dashboard", http.StatusFound)
 }
 
