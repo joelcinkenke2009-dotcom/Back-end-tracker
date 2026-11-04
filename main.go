@@ -134,7 +134,10 @@ func main() {
 	app := &Env{db: sqlDB}
 
 	app.createTables()
-	if err := app.ensureSubscriptionTables(); err != nil {\n\t\tlog.Panic("Erreur création des tables abonnements :", err)\n\t}\n\tif err := app.ensureAnalyticsTables(); err != nil {
+	if err := app.ensureSubscriptionTables(); err != nil {
+		log.Panic("Erreur création des tables abonnements :", err)
+	}
+	if err := app.ensureAnalyticsTables(); err != nil {
 		log.Panic("Erreur création des tables analytics :", err)
 	}
 
