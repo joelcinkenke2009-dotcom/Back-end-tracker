@@ -176,6 +176,9 @@ func remaining(limit, used int64) int64 {
 // createLinkWithinPlan locks the subscription row and counts links in the same
 // transaction, preventing parallel requests from bypassing the link allowance.
 func (e *Env) createLinkWithinPlan(userID, target, slug, generatedURL string) (bool, error) {
+	if err := e.ensureUserSubscription(userID); err != nil {
+		return false, err
+	}
 	tx, err := e.db.Begin()
 	if err != nil {
 		return false, err
