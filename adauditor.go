@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+var metaHTTPClient = &http.Client{Timeout: 15 * time.Second}
+
 type TokenResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
@@ -71,7 +73,7 @@ func (e *Env) HandleMetaCallback(w http.ResponseWriter, r *http.Request) {
 		appID, redirectURI, appSecret, code,
 	)
 
-	resp, err := http.Get(urlShort)
+	resp, err := metaHTTPClient.Get(urlShort)
 	if err != nil {
 		http.Error(w, "Erreur lors de la requête OAuth", http.StatusInternalServerError)
 		return
@@ -97,7 +99,7 @@ func (e *Env) HandleMetaCallback(w http.ResponseWriter, r *http.Request) {
 		appID, appSecret, shortTokenRes.AccessToken,
 	)
 
-	respLong, err := http.Get(urlLong)
+	respLong, err := metaHTTPClient.Get(urlLong)
 	if err != nil {
 		http.Error(w, "Erreur extension de token", http.StatusInternalServerError)
 		return
@@ -158,18 +160,16 @@ log.Println(user)
 		http.Error(w, "Utilisateur introuvable", http.StatusUnauthorized)
 		return
 	}
-	log.Println(accessToken)
 
 	// 1. Récupération du compte publicitaire
 	urlAccount := fmt.Sprintf("https://graph.facebook.com/v19.0/me/adaccounts?fields=id,name&access_token=%s", accessToken)
-	respAcc, err := http.Get(urlAccount)
+	respAcc, err := metaHTTPClient.Get(urlAccount)
 	if err != nil || respAcc.StatusCode != http.StatusOK {
 		http.Error(w, "Erreur récupération compte publicitaire", http.StatusInternalServerError)
 		return
 	}
 	defer respAcc.Body.Close()
 
-	log.Println(urlAccount)
 	var accRes AccountResponse
 	if err := json.NewDecoder(respAcc.Body).Decode(&accRes); err != nil || len(accRes.Data) == 0 {
 		http.Error(w, "Aucun compte publicitaire trouvé", http.StatusNotFound)
@@ -185,7 +185,7 @@ log.Println(user)
 		adAccountID, fields, accessToken,
 	)
 
-	respAds, err := http.Get(urlAds)
+	respAds, err := metaHTTPClient.Get(urlAds)
 	if err != nil || respAds.StatusCode != http.StatusOK {
 		http.Error(w, "Erreur récupération des publicités", http.StatusInternalServerError)
 		return
@@ -194,7 +194,6 @@ log.Println(user)
 
 	var adsRes AdsResponse
 	json.NewDecoder(respAds.Body).Decode(&adsRes)
-	log.Println(adsRes.Data)
 
 	// Initalisation explicite d'un tableau vide pour éviter de renvoyer "null"
 	adList := make([]SingleAdResult, 0)
@@ -218,7 +217,6 @@ log.Println(user)
 
 		adList = append(adList, item)
 	}
-	log.Println(adList)
 
 	json.NewEncoder(w).Encode(adList)
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -35,6 +36,18 @@ func(e *Env) createTables(){
 		panic(err)
 	}
 
+	// User IDs are used by authentication and account lookups.
+	var userIDIndexExists int
+	err = e.db.QueryRow("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'user_Tracker_Link' AND index_name = 'idx_user_tracker_id'").Scan(&userIDIndexExists)
+	if err != nil {
+		panic(err)
+	}
+	if userIDIndexExists == 0 {
+		if _, err = e.db.Exec("CREATE INDEX idx_user_tracker_id ON user_Tracker_Link (id)"); err != nil {
+			panic(err)
+		}
+	}
+
 	createTableLink := `CREATE TABLE IF NOT EXISTS link_Tracker_Link (
 		id INT AUTO_INCREMENT PRIMARY KEY,
 		user_id VARCHAR(250),
@@ -46,9 +59,33 @@ func(e *Env) createTables(){
 		click_pc INT DEFAULT 0,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`
-	_, err =  e.db.Exec(createTableLink)
+	_, err = e.db.Exec(createTableLink)
 	if err != nil {
 		panic(err)
+	}
+
+	// Index used by the dashboard query: WHERE user_id=? ORDER BY click_total.
+	var indexExists int
+	err = e.db.QueryRow("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'link_Tracker_Link' AND index_name = 'idx_link_user_clicks'").Scan(&indexExists)
+	if err != nil {
+		panic(err)
+	}
+	if indexExists == 0 {
+		if _, err = e.db.Exec("CREATE INDEX idx_link_user_clicks ON link_Tracker_Link (user_id, click_total, id)"); err != nil {
+			panic(err)
+		}
+	}
+
+	// Redirects and link updates frequently resolve a row by its slug.
+	var slugIndexExists int
+	err = e.db.QueryRow("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'link_Tracker_Link' AND index_name = 'idx_link_slug'").Scan(&slugIndexExists)
+	if err != nil {
+		panic(err)
+	}
+	if slugIndexExists == 0 {
+		if _, err = e.db.Exec("CREATE INDEX idx_link_slug ON link_Tracker_Link (slug)"); err != nil {
+			panic(err)
+		}
 	}
 
 	createTableMeta := `CREATE TABLE IF NOT EXISTS user_meta_ad_connect (
@@ -74,6 +111,8 @@ func main() {
 	// 	}	
 	// }
 	r := chi.NewRouter()
+	// Compress JSON responses to reduce dashboard transfer size on slower networks.
+	r.Use(middleware.Compress(5, "application/json"))
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&tls=skip-verify",os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_DATABASE"))
 	sqlDB, err := sql.Open("mysql", dsn)
@@ -86,8 +125,9 @@ func main() {
 		return
 	}
 	sqlDB.SetMaxOpenConns(25)
-	sqlDB.SetConnMaxIdleTime(25)
-	sqlDB.SetConnMaxLifetime(5*time.Minute)
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetConnMaxIdleTime(30 * time.Second)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	
 	defer sqlDB.Close()
 
@@ -116,8 +156,16 @@ func main() {
 	})
 	r.Get("/link/{slug}",app.redirectLink)
 
-	if err := http.ListenAndServe(":"+ os.Getenv("PORT"), r); err != nil {
-		fmt.Println("Erreur lors du lancement: ",err)
+	server := &http.Server{
+		Addr:              ":" + os.Getenv("PORT"),
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		fmt.Println("Erreur lors du lancement: ", err)
 		return
 	}
 }
