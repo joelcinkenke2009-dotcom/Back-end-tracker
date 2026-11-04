@@ -154,6 +154,9 @@ func (e *Env) connexion(w http.ResponseWriter, r *http.Request) {
 
 	// Réinitialiser compteur si succès
 	resetFailedLogin(email)
+	if err := e.ensureUserSubscription(userId); err != nil {
+		log.Printf("synchronisation du statut d'abonnement impossible pour %s: %v", userId, err)
+	}
 
 	cookie := &http.Cookie{
 		Name:     "user_id",
