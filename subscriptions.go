@@ -208,9 +208,8 @@ func (e *Env) createLinkWithinPlan(userID, target, slug, generatedURL string) (b
 // consumeClickQuota is an atomic compare-and-increment, so simultaneous visits
 // cannot push an account past its click allowance.
 func (e *Env) consumeClickQuota(userID string) (bool, error) {
-	if err := e.ensureUserSubscription(userID); err != nil {
-		return false, err
-	}
+	// Subscription rows are provisioned for all existing users at startup and
+	// created during signup. Keep the click path to one atomic SQL statement.
 	result, err := e.db.Exec(`UPDATE user_subscriptions
 		SET clicks_used=clicks_used+1
 		WHERE user_id=? AND (expires_at IS NULL OR expires_at > NOW())
@@ -229,10 +228,9 @@ func (e *Env) analyticsAccessMiddleware(next http.Handler) http.Handler {
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
 		}
-		if err := e.ensureUserSubscription(userID); err != nil {
-			http.Error(w, `{"error":"subscription_unavailable"}`, http.StatusInternalServerError)
-			return
-		}
+		// Do not run subscription migration/synchronization on every analytics
+		// endpoint. The indexed entitlement lookup below is sufficient, including
+		// the expiry check.
 		var allowed bool
 		err := e.db.QueryRowContext(r.Context(), `SELECT analytics_enabled FROM user_subscriptions
 			WHERE user_id=? AND (expires_at IS NULL OR expires_at > NOW())`, userID).Scan(&allowed)
