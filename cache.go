@@ -32,15 +32,14 @@ func (c *MemoryCache) Get(key string) ([]byte, bool) {
 	if c == nil {
 		return nil, false
 	}
-	now := time.Now()
-	c.mu.RLock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	item, ok := c.entries[key]
-	c.mu.RUnlock()
 	if !ok {
 		return nil, false
 	}
-	if !now.Before(item.expiresAt) {
-		c.Delete(key)
+	if !time.Now().Before(item.expiresAt) {
+		delete(c.entries, key)
 		return nil, false
 	}
 	return bytes.Clone(item.value), true
