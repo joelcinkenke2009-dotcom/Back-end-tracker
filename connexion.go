@@ -38,16 +38,26 @@ func(e *Env) AuthMiddleware(next http.Handler) http.Handler {
 			})
 			return
 		}
-		// A single indexed existence lookup is enough here. Subscription rows are
-		// initialized at startup/registration; synchronizing them on every API
-		// request used to add several sequential MySQL round trips.
-		var exists int
-		if err := e.db.QueryRowContext(r.Context(), "SELECT 1 FROM user_Tracker_Link WHERE id=? LIMIT 1", userID).Scan(&exists); err != nil {
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"login": "Veuillez vous inscrire ou vous connecter pour continuer",
-			})
-			return
+		// Account existence is stable during normal sessions. A short positive
+		// cache avoids repeating the same indexed MySQL lookup on every API call.
+		// Subscription and plan authorization remain checked separately.
+		const authCacheTTL = 20 * time.Second
+		validUser := false
+		if e.cache != nil {
+			_, validUser = e.cache.Get("auth:user:" + userID)
+		}
+		if !validUser {
+			var exists int
+			if err := e.db.QueryRowContext(r.Context(), "SELECT 1 FROM user_Tracker_Link WHERE id=? LIMIT 1", userID).Scan(&exists); err != nil {
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"login": "Veuillez vous inscrire ou vous connecter pour continuer",
+				})
+				return
+			}
+			if e.cache != nil {
+				e.cache.Set("auth:user:"+userID, []byte("1"), authCacheTTL)
+			}
 		}
 		ctx := context.WithValue(r.Context(), userInfosKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
