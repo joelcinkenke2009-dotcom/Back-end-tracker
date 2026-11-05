@@ -93,8 +93,7 @@ func (e *Env) insertTrackingEvent(r *http.Request, userID, slug, eventType, even
 // privacy-conscious event metadata for live analytics and traffic-quality analysis.
 func (e *Env) redirectWithAnalytics(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
-	var target, userID string
-	err := e.db.QueryRowContext(r.Context(), "SELECT url, user_id FROM link_Tracker_Link WHERE slug=?", slug).Scan(&target, &userID)
+	target, userID, err := e.resolveTrackedLink(r.Context(), slug)
 	if err != nil {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
@@ -324,8 +323,8 @@ func (e *Env) recordConversion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := chi.URLParam(r, "slug")
-	var userID string
-	if err := e.db.QueryRowContext(r.Context(), "SELECT user_id FROM link_Tracker_Link WHERE slug=?", slug).Scan(&userID); err != nil {
+	_, userID, err := e.resolveTrackedLink(r.Context(), slug)
+	if err != nil {
 		http.Error(w, `{"error":"unknown_link"}`, http.StatusNotFound)
 		return
 	}

@@ -421,6 +421,7 @@ func (e *Env) deleteLink(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Erreur lors de la suppression: ", err)
 		return
 	}
+	if e.cache != nil { e.cache.Delete("link:" + slug) }
 	http.Redirect(w, r,os.Getenv("FRONT") + "/dashboard", http.StatusFound)	
 }
 
@@ -439,6 +440,7 @@ func (e *Env) modifyLink(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r,os.Getenv("FRONT") + "/dashboard?status=500", http.StatusFound)
 		return
 	}
+	if e.cache != nil { e.cache.DeletePrefix("link:") }
 	http.Redirect(w, r,os.Getenv("FRONT") + "/dashboard", http.StatusFound)
 }
 
