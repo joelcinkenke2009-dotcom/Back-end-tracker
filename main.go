@@ -13,8 +13,9 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-type Env struct{
-	db *sql.DB
+type Env struct {
+	db    *sql.DB
+	cache *MemoryCache
 }
 
 
@@ -132,7 +133,7 @@ func main() {
 	
 	defer sqlDB.Close()
 
-	app := &Env{db: sqlDB}
+	app := &Env{db: sqlDB, cache: NewMemoryCache(10000)}
 
 	app.createTables()
 	if err := app.ensureSubscriptionTables(); err != nil {
@@ -164,10 +165,10 @@ func main() {
 		r.Post("/createLink", app.createLink)
 		r.Post("/modify", app.modifyLink)
 		r.Post("/verifyLink", verifyLink)
-		r.With(app.analyticsAccessMiddleware).Get("/analytics/summary", app.analyticsSummary)
-		r.With(app.analyticsAccessMiddleware).Get("/analytics/live", app.analyticsLive)
-		r.With(app.analyticsAccessMiddleware).Get("/analytics/fraud", app.analyticsFraud)
-		r.With(app.analyticsAccessMiddleware).Get("/analytics/conversions", app.analyticsConversions)
+		r.With(app.analyticsAccessMiddleware, app.cacheAnalytics(10*time.Second, "summary")).Get("/analytics/summary", app.analyticsSummary)
+		r.With(app.analyticsAccessMiddleware, app.cacheAnalytics(4*time.Second, "live")).Get("/analytics/live", app.analyticsLive)
+		r.With(app.analyticsAccessMiddleware, app.cacheAnalytics(30*time.Second, "fraud")).Get("/analytics/fraud", app.analyticsFraud)
+		r.With(app.analyticsAccessMiddleware, app.cacheAnalytics(10*time.Second, "conversions")).Get("/analytics/conversions", app.analyticsConversions)
 		r.With(app.analyticsAccessMiddleware).Post("/analytics/conversions", app.analyticsConversions)
 		r.With(app.analyticsAccessMiddleware).Get("/analytics/report", app.analyticsReport)
 	})
