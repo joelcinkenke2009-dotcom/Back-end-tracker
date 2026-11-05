@@ -83,6 +83,9 @@ func (e *Env) insertTrackingEvent(r *http.Request, userID, slug, eventType, even
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		userID, slug, eventType, eventName, value, currency, visitorHash, ipHash, ua, referrer,
 		trackingUTM(r, "utm_source"), trackingUTM(r, "utm_medium"), trackingUTM(r, "utm_campaign"), isBot, duplicate)
+	if err == nil && e.cache != nil {
+		e.cache.DeletePrefix("analytics:" + userID + ":")
+	}
 	return err
 }
 
@@ -126,6 +129,8 @@ func (e *Env) redirectWithAnalytics(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, err := e.db.ExecContext(r.Context(), query+" WHERE slug=?", slug); err != nil {
 			fmt.Println("analytics click counter update failed:", err)
+		} else if e.cache != nil {
+			e.cache.DeletePrefix("analytics:" + userID + ":")
 		}
 	}
 	http.Redirect(w, r, target, http.StatusFound)
