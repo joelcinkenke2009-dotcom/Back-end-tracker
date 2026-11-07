@@ -145,6 +145,7 @@ func main() {
 
 	r.Post("/users/inscription", app.inscription)
 	r.Post("/users/connexion", app.connexion)
+	r.HandleFunc("/users/google", app.googleAuth)
 	r.Post("/admins/connexion", connexionAdmins)
 	r.Post("/paiement/initialisation", app.checkoutForPlan("standard", app.paiement))
 	r.Post("/paiement/initialisation2", app.checkoutForPlan("unlimited", app.paiement2))
