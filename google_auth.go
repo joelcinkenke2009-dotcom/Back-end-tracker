@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -89,7 +90,7 @@ func (e *Env) googleAuth(w http.ResponseWriter, r *http.Request) {
 
 	var userID string
 	err = e.db.QueryRowContext(r.Context(), "SELECT id FROM user_Tracker_Link WHERE email=? LIMIT 1", email).Scan(&userID)
-	if err != nil && err.Error() != "sql: no rows in result set" {
+	if err != nil && err != sql.ErrNoRows {
 		log.Printf("Google account lookup failed: %v", err)
 		http.Error(w, `{"error":"account_lookup_failed"}`, http.StatusInternalServerError)
 		return
