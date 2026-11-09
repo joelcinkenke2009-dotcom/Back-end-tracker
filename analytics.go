@@ -160,12 +160,12 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 		Conversions int64  `json:"conversions"`
 	}
 	var (
-		clicks, mobile, desktop, conversions, suspicious int64
+		clicks, clicks30d, mobile, desktop, conversions, suspicious int64
 		daily = make([]dailyPoint, 0)
-		errs [4]error
+		errs [5]error
 		wg sync.WaitGroup
 	)
-	wg.Add(4)
+	wg.Add(5)
 
 	go func() {
 		defer wg.Done()
@@ -176,12 +176,18 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer wg.Done()
 		errs[1] = e.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tracker_events
-			WHERE user_id=? AND event_type='conversion'
-			AND created_at >= NOW() - INTERVAL 30 DAY`, user).Scan(&conversions)
+			WHERE user_id=? AND event_type='click' AND is_bot=0 AND is_duplicate=0
+			AND created_at >= NOW() - INTERVAL 30 DAY`, user).Scan(&clicks30d)
 	}()
 	go func() {
 		defer wg.Done()
 		errs[2] = e.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tracker_events
+			WHERE user_id=? AND event_type='conversion' AND is_bot=0 AND is_duplicate=0
+			AND created_at >= NOW() - INTERVAL 30 DAY`, user).Scan(&conversions)
+	}()
+	go func() {
+		defer wg.Done()
+		errs[3] = e.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tracker_events
 			WHERE user_id=? AND (is_bot=1 OR is_duplicate=1)
 			AND created_at >= NOW() - INTERVAL 30 DAY`, user).Scan(&suspicious)
 	}()
@@ -194,7 +200,7 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 			AND created_at >= NOW() - INTERVAL 14 DAY
 			GROUP BY DATE(created_at) ORDER BY DATE(created_at)`, user)
 		if err != nil {
-			errs[3] = err
+			errs[4] = err
 			return
 		}
 		defer rows.Close()
@@ -206,7 +212,7 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 			}
 			daily = append(daily, point)
 		}
-		errs[3] = rows.Err()
+		errs[4] = rows.Err()
 	}()
 
 	wg.Wait()
@@ -218,7 +224,7 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"clicks": clicks, "mobile": mobile, "desktop": desktop,
+		"clicks": clicks, "clicks_30d": clicks30d, "mobile": mobile, "desktop": desktop,
 		"conversions": conversions, "suspicious": suspicious, "daily": daily,
 	})
 }
