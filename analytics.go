@@ -149,8 +149,7 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// These four reads are independent. Running them concurrently removes the
-	// serial database wait from the analytics summary without changing its JSON.
+	// These independent reads run concurrently to reduce serial database wait time.
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
@@ -207,7 +206,7 @@ func (e *Env) analyticsSummary(w http.ResponseWriter, r *http.Request) {
 		for rows.Next() {
 			var point dailyPoint
 			if err := rows.Scan(&point.Date, &point.Clicks, &point.Conversions); err != nil {
-				errs[3] = err
+				errs[4] = err
 				return
 			}
 			daily = append(daily, point)
