@@ -3,319 +3,142 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
-type Id struct{
+type Id struct {
 	Id string `json:"id"`
 }
 
-type StructPaiement struct{
+type StructPaiement struct {
 	RedirectUrl string `json:"redirectUrl"`
-	Cart Id `json:"cart"`
+	Cart        Id     `json:"cart"`
 }
 
-func(e *Env) paiement(w http.ResponseWriter, r *http.Request) {
-	cookie := cookieRecuperation(w, r, "user_id")
-	if cookie == "nil" {
-		http.Redirect(w, r,os.Getenv("FRONT") + "/inscription", http.StatusFound)
-		return
-	}
-	
-	var (
-		name string
-		firstName string
-		email string
-	)
-
-	err := e.db.QueryRow(`SELECT name,first_name,email FROM user_Tracker_Link WHERE id=?`, cookie).Scan(&name,&firstName,&email)
-	if err != nil {
-		fmt.Println("Erreur récupération utilisateur :", err)
-		return
-	}
-
-	data := map[string]any{
-		"productDocumentId": os.Getenv("ID_PRODUIT"),
-		"email":             email,
-		"firstName":         firstName,
-		"lastName":          name,
-		"redirectUrl":       os.Getenv("MY_URL") + "/paiement/verifyPaiement",
-		"meta": map[string]any{
-			"userId": cookie,
-		},
-	}
-
-	jsonData, _ := json.Marshal(data)
-
-	req, err := http.NewRequest("POST", os.Getenv("API_URL") + "/checkout", bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	Authorization := fmt.Sprintf("Bearer %s", os.Getenv("API_KEY"))
-	req.Header.Set("Content-type", "application/json")
-	req.Header.Set("Authorization", Authorization)
-
-	clent := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := clent.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var result StructPaiement
-
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		log.Fatal("Erreur de decodage JSON: ", err)
-	}
-
-	idCookie := &http.Cookie{
-		Name: "panier_id",
-		Value: result.Cart.Id,
-		Path: "/paiement",
-		HttpOnly: true,
-		Secure: true,
-		SameSite: http.SameSiteNoneMode,
-		MaxAge:   1200,
-	}
-	http.SetCookie(w, idCookie)
-	http.Redirect(w, r, result.RedirectUrl, http.StatusFound)
-}
-
-
-func(e *Env) paiement2(w http.ResponseWriter, r *http.Request) {
-	cookie := cookieRecuperation(w, r, "user_id")
-	if cookie == "nil" {
-		http.Redirect(w, r,os.Getenv("FRONT") + "/inscription", http.StatusFound)
-		return
-	}
-	
-	var (
-		name string
-		firstName string
-		email string
-	)
-
-	err := e.db.QueryRow(`SELECT name,first_name,email FROM user_Tracker_Link WHERE id=?`, cookie).Scan(&name,&firstName,&email)
-	if err != nil {
-		fmt.Println("Erreur récupération utilisateur :", err)
-		return
-	}
-
-	data := map[string]any{
-		"productDocumentId": "87b79ab6-ad20-4d6d-b219-6d8ab831ef6e",
-		"email":             email,
-		"firstName":         firstName,
-		"lastName":          name,
-		"redirectUrl":       os.Getenv("MY_URL") + "/paiement/verifyPaiement2",
-		"meta": map[string]any{
-			"userId": cookie,
-		},
-	}
-
-	jsonData, _ := json.Marshal(data)
-
-	req, err := http.NewRequest("POST", os.Getenv("API_URL") + "/checkout", bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	Authorization := fmt.Sprintf("Bearer %s", os.Getenv("API_KEY"))
-	req.Header.Set("Content-type", "application/json")
-	req.Header.Set("Authorization", Authorization)
-
-	clent := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := clent.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var result StructPaiement
-
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		log.Fatal("Erreur de decodage JSON: ", err)
-	}
-
-	idCookie := &http.Cookie{
-		Name: "panier_id",
-		Value: result.Cart.Id,
-		Path: "/paiement",
-		HttpOnly: true,
-		Secure: true,
-		SameSite: http.SameSiteNoneMode,
-		MaxAge:   1200,
-	}
-	http.SetCookie(w, idCookie)
-	http.Redirect(w, r, result.RedirectUrl, http.StatusFound)
-}
-
-
-func(e *Env) paiement3(w http.ResponseWriter, r *http.Request) {
-	cookie := cookieRecuperation(w, r, "user_id")
-	if cookie == "nil" {
-		http.Redirect(w, r,os.Getenv("FRONT") + "/inscription", http.StatusFound)
-		return
-	}
-	
-	var (
-		name string
-		firstName string
-		email string
-	)
-
-	err := e.db.QueryRow(`SELECT name,first_name,email FROM user_Tracker_Link WHERE id=?`, cookie).Scan(&name,&firstName,&email)
-	if err != nil {
-		fmt.Println("Erreur récupération utilisateur :", err)
-		return
-	}
-
-	data := map[string]any{
-		"productDocumentId": "c8dec53d-aac0-4d40-bd94-0574dcf99cbf",
-		"email":             email,
-		"firstName":         firstName,
-		"lastName":          name,
-		"redirectUrl":       os.Getenv("MY_URL") + "/paiement/verifyPaiement3",
-		"meta": map[string]any{
-			"userId": cookie,
-		},
-	}
-
-	jsonData, _ := json.Marshal(data)
-
-	req, err := http.NewRequest("POST", os.Getenv("API_URL") + "/checkout", bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	Authorization := fmt.Sprintf("Bearer %s", os.Getenv("API_KEY"))
-	req.Header.Set("Content-type", "application/json")
-	req.Header.Set("Authorization", Authorization)
-
-	clent := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := clent.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var result StructPaiement
-
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		log.Fatal("Erreur de decodage JSON: ", err)
-	}
-
-	idCookie := &http.Cookie{
-		Name: "panier_id",
-		Value: result.Cart.Id,
-		Path: "/paiement",
-		HttpOnly: true,
-		Secure: true,
-		SameSite: http.SameSiteNoneMode,
-		MaxAge:   1200,
-	}
-	http.SetCookie(w, idCookie)
-	http.Redirect(w, r, result.RedirectUrl, http.StatusFound)
-}
-
-type Meta struct{
+type Meta struct {
 	UserId string `json:"userId"`
 }
 
-type PaiementStruct struct{
-	Statut string `json:"status"`
+type PaiementStruct struct {
+	Statut    string `json:"status"`
 	CreatedAt string `json:"created_at"`
-	Meta Meta `json:"meta"`
-} 
+	Meta      Meta   `json:"meta"`
+}
 
-func(e *Env) paiementVerify(w http.ResponseWriter, r *http.Request)  {
-	panier := cookieRecuperation(w,r,"panier_id")
-	if panier == "nil" {
-		http.Redirect(w,r,os.Getenv("FRONT") + "/dashbord?error=Authorize",http.StatusFound)
+// startCheckout centralizes the three subscription checkout flows. A temporary
+// payment-provider or network failure must return an HTTP error, never terminate
+// the API process.
+func (e *Env) startCheckout(w http.ResponseWriter, r *http.Request, productID, callbackPath string) {
+	userID := cookieRecuperation(w, r, "user_id")
+	frontURL := strings.TrimRight(os.Getenv("FRONT"), "/")
+	if userID == "nil" || userID == "" {
+		http.Redirect(w, r, frontURL+"/inscription", http.StatusFound)
 		return
 	}
-	url := fmt.Sprintf(os.Getenv("API_URL") + "/%s",panier)
-	requete,err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		fmt.Println("Erreur lors la creation de la requete: ",err)
+
+	if productID == "" || os.Getenv("API_URL") == "" || os.Getenv("API_KEY") == "" || os.Getenv("MY_URL") == "" {
+		log.Printf("payment checkout is not configured: user_id=%q", userID)
+		http.Error(w, "Le paiement est temporairement indisponible. Réessayez plus tard.", http.StatusServiceUnavailable)
 		return
 	}
-	Authorization := fmt.Sprintf("Bearer %s", os.Getenv("API_KEY"))
-	requete.Header.Set("Content-type", "application/json")
-	requete.Header.Set("Authorization", Authorization)
 
-	clent := &http.Client{
-		Timeout: 10 * time.Second,
+	var name, firstName, email string
+	if err := e.db.QueryRowContext(r.Context(),
+		"SELECT name, first_name, email FROM user_Tracker_Link WHERE id=?", userID,
+	).Scan(&name, &firstName, &email); err != nil {
+		log.Printf("payment user lookup failed: user_id=%q: %v", userID, err)
+		http.Error(w, "Impossible de préparer votre paiement. Réessayez.", http.StatusInternalServerError)
+		return
 	}
 
-	resp, err := clent.Do(requete)
+	payload := map[string]any{
+		"productDocumentId": productID,
+		"email":             email,
+		"firstName":         firstName,
+		"lastName":          name,
+		"redirectUrl":       strings.TrimRight(os.Getenv("MY_URL"), "/") + callbackPath,
+		"meta": map[string]any{
+			"userId": userID,
+		},
+	}
+
+	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("payment payload encoding failed: user_id=%q: %v", userID, err)
+		http.Error(w, "Impossible de préparer votre paiement.", http.StatusInternalServerError)
+		return
+	}
+
+	endpoint := strings.TrimRight(os.Getenv("API_URL"), "/") + "/checkout"
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, bytes.NewReader(jsonData))
+	if err != nil {
+		log.Printf("payment request creation failed: user_id=%q: %v", userID, err)
+		http.Error(w, "Le service de paiement est temporairement indisponible.", http.StatusBadGateway)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+os.Getenv("API_KEY"))
+
+	client := &http.Client{Timeout: 25 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("payment provider request failed: user_id=%q: %v", userID, err)
+		http.Error(w, "Le service de paiement ne répond pas. Réessayez dans quelques instants.", http.StatusBadGateway)
+		return
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Fatalf("Response non-OK: %s - %s",resp.Status,body )
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var paiement PaiementStruct
-
-	dateLimite := time.Now().Add(30*24*time.Hour)
-	
-	err = json.Unmarshal(body,&paiement)
-	if err!=nil {
-		log.Fatal("Erreur lors du decodage JSON: ",err)
-	}
-
-	switch paiement.Statut {
-	case "completed":
-		_,err := e.db.Exec("UPDATE user_tracker_link SET is_active_date=? WHERE id=?",dateLimite,paiement.Meta.UserId)
-		if err!=nil {
-			log.Fatal("Erreur lors de la modification de l'utilisateur")
-		}
-		http.Redirect(w, r,os.Getenv("FRONT") + "/dashboard", http.StatusFound)
-		return
-	case "payment_failed":
-		http.Redirect(w, r,os.Getenv("FRONT") + "/dashbord?error=405", http.StatusFound)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		log.Printf("payment provider returned HTTP %d: user_id=%q", resp.StatusCode, userID)
+		http.Error(w, "Le fournisseur de paiement n'a pas pu créer votre commande.", http.StatusBadGateway)
 		return
 	}
 
+	var result StructPaiement
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
+		log.Printf("payment provider response decoding failed: user_id=%q: %v", userID, err)
+		http.Error(w, "Réponse invalide du fournisseur de paiement. Réessayez.", http.StatusBadGateway)
+		return
+	}
+	if result.Cart.Id == "" {
+		log.Printf("payment provider response has no cart id: user_id=%q", userID)
+		http.Error(w, "La commande de paiement n'a pas pu être créée.", http.StatusBadGateway)
+		return
+	}
+
+	checkoutURL, err := url.Parse(result.RedirectUrl)
+	if err != nil || !checkoutURL.IsAbs() || checkoutURL.Scheme != "https" || checkoutURL.Host == "" {
+		log.Printf("payment provider returned an invalid checkout URL: user_id=%q", userID)
+		http.Error(w, "L'adresse sécurisée du paiement est invalide. Contactez le support.", http.StatusBadGateway)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "panier_id",
+		Value:    result.Cart.Id,
+		Path:     "/paiement",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
+		MaxAge:   1200,
+	})
+	http.Redirect(w, r, checkoutURL.String(), http.StatusFound)
+}
+
+func (e *Env) paiement(w http.ResponseWriter, r *http.Request) {
+	e.startCheckout(w, r, os.Getenv("ID_PRODUIT"), "/paiement/verifyPaiement")
+}
+
+func (e *Env) paiement2(w http.ResponseWriter, r *http.Request) {
+	e.startCheckout(w, r, "87b79ab6-ad20-4d6d-b219-6d8ab831ef6e", "/paiement/verifyPaiement2")
+}
+
+func (e *Env) paiement3(w http.ResponseWriter, r *http.Request) {
+	e.startCheckout(w, r, "c8dec53d-aac0-4d40-bd94-0574dcf99cbf", "/paiement/verifyPaiement3")
 }
