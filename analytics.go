@@ -46,6 +46,16 @@ func (e *Env) ensureAnalyticsTables() error {
 		INDEX idx_tracker_events_user_type_date (user_id, event_type, created_at),
 		INDEX idx_tracker_events_slug_date (slug, created_at)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+	if err != nil {
+		return err
+	}
+	_, err = e.db.Exec(`CREATE TABLE IF NOT EXISTS tracker_click_dedup (
+		slug VARCHAR(250) NOT NULL,
+		visitor_hash CHAR(64) NOT NULL,
+		last_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (slug, visitor_hash),
+		INDEX idx_tracker_click_dedup_last_seen (last_seen)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
 	return err
 }
 
@@ -89,6 +99,27 @@ func (e *Env) insertTrackingEvent(r *http.Request, userID, slug, eventType, even
 	return err
 }
 
+// isDuplicateClickDB performs an atomic, database-backed 30-second deduplication.
+// Unlike an in-memory map, it remains consistent across concurrent requests,
+// multiple Render instances and process restarts.
+func (e *Env) isDuplicateClickDB(ctx context.Context, slug string, r *http.Request) (bool, error) {
+	visitorHash, _ := trackingVisitor(r)
+	result, err := e.db.ExecContext(ctx, `INSERT INTO tracker_click_dedup (slug, visitor_hash, last_seen)
+		VALUES (?, ?, NOW())
+		ON DUPLICATE KEY UPDATE last_seen = IF(last_seen < NOW() - INTERVAL 30 SECOND, NOW(), last_seen)`,
+		slug, visitorHash)
+	if err != nil {
+		return true, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return true, err
+	}
+	// MySQL reports 1 for a new row, 2 for an updated row, and 0 when the
+	// existing timestamp was left unchanged because the request was repeated.
+	return affected == 0, nil
+}
+
 // redirectWithAnalytics preserves the existing short-link behaviour while recording
 // privacy-conscious event metadata for live analytics and traffic-quality analysis.
 func (e *Env) redirectWithAnalytics(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +134,13 @@ func (e *Env) redirectWithAnalytics(w http.ResponseWriter, r *http.Request) {
 	bot := isBotRequest(r)
 	duplicate := false
 	if !bot {
-		duplicate = isDuplicateClick(slug, r)
+		duplicate, err = e.isDuplicateClickDB(r.Context(), slug, r)
+		if err != nil {
+			// Fail closed for counting: a database failure must not create
+			// an unprotected increment that could be duplicated on retry.
+			log.Printf("click deduplication failed: slug=%q: %v", slug, err)
+			duplicate = true
+		}
 	}
 	clickAllowed := false
 	if !bot && !duplicate {
@@ -480,3 +517,23 @@ func (e *Env) analyticsReport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+
+
+// startClickDedupCleanup bounds the persistent deduplication table. A visitor
+// who has not returned for 24 hours no longer needs a retained deduplication key.
+func (e *Env) startClickDedupCleanup() {
+	go func() {
+		cleanup := func() {
+			if _, err := e.db.Exec(`DELETE FROM tracker_click_dedup
+				WHERE last_seen < NOW() - INTERVAL 24 HOUR`); err != nil {
+				log.Printf("click deduplication cleanup failed: %v", err)
+			}
+		}
+		cleanup()
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			cleanup()
+		}
+	}()
+}
