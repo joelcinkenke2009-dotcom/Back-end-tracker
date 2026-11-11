@@ -140,23 +140,14 @@ type cachedTrackedLink struct {
 	UserID string `json:"user_id"`
 }
 
-// resolveTrackedLink caches only the stable slug destination. Click quotas,
-// click counters and event writes remain database-backed and are never cached.
+// resolveTrackedLink always reads the current destination from MySQL.
+// The Next.js dashboard updates the shared database, but it cannot invalidate
+// this Go process's in-memory cache. Caching here made short links redirect to
+// stale destinations after an edit, so only the current database row is used.
 func (e *Env) resolveTrackedLink(ctx context.Context, slug string) (string, string, error) {
-	key := "link:" + slug
-	if cached, ok := e.cache.Get(key); ok {
-		var link cachedTrackedLink
-		if json.Unmarshal(cached, &link) == nil && link.URL != "" && link.UserID != "" {
-			return link.URL, link.UserID, nil
-		}
-		e.cache.Delete(key)
-	}
 	var link cachedTrackedLink
 	if err := e.db.QueryRowContext(ctx, "SELECT url, user_id FROM link_Tracker_Link WHERE slug=?", slug).Scan(&link.URL, &link.UserID); err != nil {
 		return "", "", err
-	}
-	if encoded, err := json.Marshal(link); err == nil {
-		e.cache.Set(key, encoded, 5*time.Minute)
 	}
 	return link.URL, link.UserID, nil
 }
