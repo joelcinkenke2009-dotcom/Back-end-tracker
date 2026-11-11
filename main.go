@@ -142,6 +142,7 @@ func main() {
 	if err := app.ensureAnalyticsTables(); err != nil {
 		log.Panic("Erreur création des tables analytics :", err)
 	}
+	app.startClickDedupCleanup()
 
 	r.Post("/users/inscription", app.inscription)
 	r.Post("/users/connexion", app.connexion)
