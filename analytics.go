@@ -517,3 +517,23 @@ func (e *Env) analyticsReport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+
+
+// startClickDedupCleanup bounds the persistent deduplication table. A visitor
+// who has not returned for 24 hours no longer needs a retained deduplication key.
+func (e *Env) startClickDedupCleanup() {
+	go func() {
+		cleanup := func() {
+			if _, err := e.db.Exec(`DELETE FROM tracker_click_dedup
+				WHERE last_seen < NOW() - INTERVAL 24 HOUR`); err != nil {
+				log.Printf("click deduplication cleanup failed: %v", err)
+			}
+		}
+		cleanup()
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			cleanup()
+		}
+	}()
+}
